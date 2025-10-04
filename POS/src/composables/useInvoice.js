@@ -103,7 +103,7 @@ export function useInvoice() {
 			existingItem.quantity += quantity
 			recalculateItem(existingItem)
 		} else {
-			invoiceItems.value.push({
+			invoiceItems.value.unshift({
 				item_code: item.item_code,
 				item_name: item.item_name,
 				rate: item.rate || item.price_list_rate || 0,

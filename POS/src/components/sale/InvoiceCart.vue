@@ -184,9 +184,9 @@
 									<h4 class="text-xs font-semibold text-gray-900 truncate">
 										{{ item.item_name }}
 									</h4>
-									<p class="text-[10px] text-gray-500">
-										{{ formatCurrency(item.rate) }} / {{ item.stock_uom || 'Nos' }}
-									</p>
+                                                                        <p class="text-[10px] text-gray-500">
+                                                                                {{ formatCurrency(item.rate) }} / {{ item.uom || item.stock_uom || 'Nos' }}
+                                                                        </p>
 								</div>
 								<button
 									@click="$emit('remove-item', item.item_code)"

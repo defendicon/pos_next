@@ -203,10 +203,10 @@
 							<h3 class="text-xs font-semibold text-gray-900 truncate mb-0.5 leading-tight">
 								{{ item.item_name }}
 							</h3>
-							<p class="text-[10px] text-gray-500">
-								{{ formatCurrency(item.rate || item.price_list_rate || 0) }}
-								<span class="text-gray-400">/ {{ item.stock_uom || 'Nos' }}</span>
-							</p>
+                                                        <p class="text-[10px] text-gray-500">
+                                                                {{ formatCurrency(item.rate || item.price_list_rate || 0) }}
+                                                                <span class="text-gray-400">/ {{ item.uom || item.stock_uom || 'Nos' }}</span>
+                                                        </p>
 						</div>
 					</div>
 				</div>
@@ -300,7 +300,7 @@
 									{{ Math.floor(item.actual_qty || item.stock_qty || 0) }}
 								</span>
 							</td>
-							<td class="px-3 py-2 whitespace-nowrap"><div class="text-sm text-gray-500">{{ item.stock_uom || 'Nos' }}</div></td>
+                                                        <td class="px-3 py-2 whitespace-nowrap"><div class="text-sm text-gray-500">{{ item.uom || item.stock_uom || 'Nos' }}</div></td>
 						</tr>
 					</tbody>
 				</table>

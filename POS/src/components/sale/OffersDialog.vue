@@ -235,22 +235,26 @@ const offersResource = createResource({
 
 // Computed eligible offers
 const eligibleOffers = computed(() => {
-	if (!allOffers.value) return []
+        if (!allOffers.value) return []
 
-	// Filter for auto-apply offers only (not coupon-based)
-	return allOffers.value
-		.filter(offer => offer.auto && !offer.coupon_based)
-		.sort((a, b) => {
-			// Sort by eligibility first (eligible offers on top)
-			const aEligible = checkOfferEligibility(a)
-			const bEligible = checkOfferEligibility(b)
-			if (aEligible !== bEligible) return bEligible ? 1 : -1
+        return allOffers.value
+                .filter(offer => !offer.coupon_based)
+                .sort((a, b) => {
+                        // Sort by eligibility first (eligible offers on top)
+                        const aEligible = checkOfferEligibility(a)
+                        const bEligible = checkOfferEligibility(b)
+                        if (aEligible !== bEligible) return bEligible ? 1 : -1
 
-			// Then sort by discount value (higher discounts first)
-			const aValue = a.discount_percentage || a.discount_amount || 0
-			const bValue = b.discount_percentage || b.discount_amount || 0
-			return bValue - aValue
-		})
+                        // Prioritize auto offers when both share the same eligibility state
+                        if (a.auto !== b.auto) {
+                                return b.auto ? 1 : -1
+                        }
+
+                        // Then sort by discount value (higher discounts first)
+                        const aValue = a.discount_percentage || a.discount_amount || 0
+                        const bValue = b.discount_percentage || b.discount_amount || 0
+                        return bValue - aValue
+                })
 })
 
 watch(() => props.modelValue, (val) => {

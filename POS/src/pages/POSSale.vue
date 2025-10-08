@@ -621,6 +621,10 @@ const autoAppliedOffer = ref(null)
 const appliedCoupon = ref(null)
 const pendingPaymentAfterCustomer = ref(false)
 
+// Internal guards to avoid recursive re-application loops
+let isApplyingManualOffer = false
+let isProcessingAutoOffer = false
+
 // Get global dialog state for divider behavior
 const { isAnyDialogOpen } = useDialogState()
 
@@ -753,40 +757,65 @@ watch(hasOpenShift, value => {
 
 // Watch cart changes to auto-apply eligible offers with debouncing
 let autoApplyTimeout = null
-watch([invoiceItems, subtotal], async (newVal, oldVal) => {
-	// Clear any pending auto-apply
-	if (autoApplyTimeout) {
-		clearTimeout(autoApplyTimeout)
-	}
+watch([invoiceItems, subtotal], async () => {
+        // Clear any pending auto-apply
+        if (autoApplyTimeout) {
+                clearTimeout(autoApplyTimeout)
+        }
 
-	// Only auto-apply if:
-	// 1. Cart is not empty
-	// 2. POS profile is set
-	// 3. No offer is currently applied (to avoid overwriting manual selections)
-	if (invoiceItems.value.length > 0 && posProfile.value && !autoAppliedOffer.value) {
-		// Debounce for 500ms to avoid excessive API calls
-		autoApplyTimeout = setTimeout(async () => {
-			await autoApplyOffers()
-		}, 500)
-	} else if (invoiceItems.value.length === 0) {
-		// Clear auto-applied offers when cart is emptied
-		autoAppliedOffer.value = null
-	}
+        // Only auto-apply if:
+        // 1. Cart is not empty
+        // 2. POS profile is set
+        // 3. No offer is currently applied (to avoid overwriting manual selections)
+        if (invoiceItems.value.length > 0 && posProfile.value && !autoAppliedOffer.value) {
+                // Debounce for 500ms to avoid excessive API calls
+                autoApplyTimeout = setTimeout(async () => {
+                        await autoApplyOffers()
+                }, 500)
+        } else if (invoiceItems.value.length === 0) {
+                // Clear auto-applied offers when cart is emptied
+                autoAppliedOffer.value = null
+        }
 }, { deep: true })
 
 // Watch for items changes and re-apply offer if one is already applied
-watch(invoiceItems, () => {
-	if (autoAppliedOffer.value && invoiceItems.value.length > 0) {
-		// Re-apply the current offer to new items
-		applyDiscount(autoAppliedOffer.value)
-	}
+watch(invoiceItems, async () => {
+        if (!autoAppliedOffer.value || invoiceItems.value.length === 0) {
+                return
+        }
+
+        // Prevent recursive loops when we are already adjusting discounts
+        if (autoAppliedOffer.value?.__type === "manual") {
+                if (isApplyingManualOffer) {
+                        return
+                }
+                applyOfferWithGuard(autoAppliedOffer.value)
+        } else if (autoAppliedOffer.value?.__type === "auto") {
+                if (isProcessingAutoOffer) {
+                        return
+                }
+                await autoApplyOffers()
+        }
 }, { deep: true })
 
+function applyOfferWithGuard(offer) {
+        if (!offer) {
+                return
+        }
+
+        try {
+                isApplyingManualOffer = true
+                applyDiscount(offer)
+        } finally {
+                isApplyingManualOffer = false
+        }
+}
+
 onUnmounted(() => {
-	// Clean up timeout
-	if (autoApplyTimeout) {
-		clearTimeout(autoApplyTimeout)
-	}
+        // Clean up timeout
+        if (autoApplyTimeout) {
+                clearTimeout(autoApplyTimeout)
+        }
 
 	// Clean up event listeners
 	document.removeEventListener('click', handleClickOutside)
@@ -1180,10 +1209,11 @@ function handleReturnCreated(returnInvoice) {
 }
 
 function handleDiscountApplied(discount) {
-	// Use the composable's applyDiscount function
-	applyDiscount(discount)
-	appliedCoupon.value = discount
-	showCouponDialog.value = false
+        // Use the composable's applyDiscount function
+        applyDiscount(discount)
+        autoAppliedOffer.value = null
+        appliedCoupon.value = discount
+        showCouponDialog.value = false
 
 	toast.create({
 		title: "Coupon Applied",
@@ -1208,12 +1238,12 @@ function handleDiscountRemoved() {
 }
 
 function handleOfferApplied(offer) {
-	// Use the composable's applyDiscount function
-	applyDiscount(offer)
-	autoAppliedOffer.value = offer
-	showOffersDialog.value = false
+        // Use guarded discount application to avoid recursive watchers
+        applyOfferWithGuard(offer)
+        autoAppliedOffer.value = { ...offer, __type: "manual" }
+        showOffersDialog.value = false
 
-	toast.create({
+        toast.create({
 		title: "Offer Applied",
 		text: `${offer.name} applied successfully`,
 		icon: "check",
@@ -1235,13 +1265,18 @@ function handleOfferRemoved() {
 }
 
 async function autoApplyOffers() {
-	// Automatically apply eligible offers from the backend
-	try {
-		// Clear auto-applied flag if cart is empty
-		if (invoiceItems.value.length === 0) {
-			autoAppliedOffer.value = null
-			return
-		}
+        if (isProcessingAutoOffer) {
+                return
+        }
+
+        isProcessingAutoOffer = true
+        // Automatically apply eligible offers from the backend
+        try {
+                // Clear auto-applied flag if cart is empty
+                if (invoiceItems.value.length === 0) {
+                        autoAppliedOffer.value = null
+                        return
+                }
 
 		const invoiceData = {
 			doctype: "Sales Invoice",
@@ -1285,7 +1320,12 @@ async function autoApplyOffers() {
 					updateItemQuantity(item.item_code, item.quantity)
 				})
 
-				autoAppliedOffer.value = { name: "Auto Offer", applied: true }
+                                autoAppliedOffer.value = {
+                                        name: "Auto Offer",
+                                        applied: true,
+                                        __type: "auto",
+                                        rules: result.applied_pricing_rules || [],
+                                }
 
 				toast.create({
 					title: "Offers Applied",
@@ -1294,13 +1334,15 @@ async function autoApplyOffers() {
 					iconClasses: "text-green-600",
 				})
 			} else {
-				autoAppliedOffer.value = null
-			}
-		}
-	} catch (error) {
-		// Silently fail - don't interrupt the user experience
-		console.error("Error auto-applying offers:", error)
-	}
+                                autoAppliedOffer.value = null
+                        }
+                }
+        } catch (error) {
+                // Silently fail - don't interrupt the user experience
+                console.error("Error auto-applying offers:", error)
+        } finally {
+                isProcessingAutoOffer = false
+        }
 }
 
 function handleBatchSerialSelected(batchSerial) {

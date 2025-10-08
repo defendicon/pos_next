@@ -454,19 +454,15 @@ const offersResource = createResource({
 		}
 	},
 	auto: true,
-	onSuccess(data) {
-		const offers = data?.message || data || []
-		console.log("✓ Loaded offers:", offers.length, offers)
+        onSuccess(data) {
+                const offers = data?.message || data || []
+                console.log("✓ Loaded offers:", offers.length, offers)
 
-		// Filter only auto-apply offers that are eligible
-		const eligible = offers.filter(
-			(offer) =>
-				offer.auto && !offer.coupon_based && checkOfferEligibility(offer),
-		)
-
-		console.log("✓ Eligible offers:", eligible.length, eligible)
-		availableOffers.value = eligible.slice(0, 3) // Show top 3
-	},
+                const sorted = sortOffersForPreview(offers)
+                const eligible = sorted.filter(checkOfferEligibility)
+                console.log("✓ Eligible offers:", eligible.length, eligible)
+                availableOffers.value = sorted.slice(0, 3) // Show top 3 suggestions
+        },
 	onError(error) {
 		console.error("Error loading offers:", error)
 	},
@@ -502,17 +498,13 @@ watch(
 // Watch for cart changes to update eligible offers
 watch(
 	() => props.grandTotal,
-	() => {
-		if (offersResource.data) {
-			const offers = offersResource.data?.message || offersResource.data || []
-			availableOffers.value = offers
-				.filter(
-					(offer) =>
-						offer.auto && !offer.coupon_based && checkOfferEligibility(offer),
-				)
-				.slice(0, 3)
-		}
-	},
+        () => {
+                if (offersResource.data) {
+                        const offers = offersResource.data?.message || offersResource.data || []
+                        const sorted = sortOffersForPreview(offers)
+                        availableOffers.value = sorted.slice(0, 3)
+                }
+        },
 )
 
 // Computed top offer for preview
@@ -523,14 +515,37 @@ const topOffer = computed(() => {
 })
 
 function checkOfferEligibility(offer) {
-	// Check eligibility based on SUBTOTAL (before tax)
-	if (offer.min_amt && props.subtotal < offer.min_amt) {
-		return false
-	}
-	if (offer.max_amt && props.subtotal > offer.max_amt) {
-		return false
-	}
-	return true
+        // Check eligibility based on SUBTOTAL (before tax)
+        if (offer.min_amt && props.subtotal < offer.min_amt) {
+                return false
+        }
+        if (offer.max_amt && props.subtotal > offer.max_amt) {
+                return false
+        }
+        if (offer.min_qty) {
+                const totalQty = props.items.reduce((sum, item) => sum + item.quantity, 0)
+                if (totalQty < offer.min_qty) {
+                        return false
+                }
+        }
+        return true
+}
+
+function sortOffersForPreview(offers) {
+        const filtered = (offers || []).filter((offer) => !offer.coupon_based)
+        return filtered.sort((a, b) => {
+                const aEligible = checkOfferEligibility(a)
+                const bEligible = checkOfferEligibility(b)
+                if (aEligible !== bEligible) return bEligible ? 1 : -1
+
+                if (a.auto !== b.auto) {
+                        return b.auto ? 1 : -1
+                }
+
+                const aValue = a.discount_percentage || a.discount_amount || 0
+                const bValue = b.discount_percentage || b.discount_amount || 0
+                return bValue - aValue
+        })
 }
 
 // Direct computed results - zero latency filtering!

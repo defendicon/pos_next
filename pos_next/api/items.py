@@ -369,27 +369,27 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 			)
 			barcode_map = {b["parent"]: b["barcode"] for b in barcodes}
 
-                # Enrich items with price, stock, and barcode data
-                for item in items:
-                        # Get price
-                        price = frappe.db.get_value(
-                                "Item Price",
-                                {
-                                        "item_code": item["item_code"],
-                                        "price_list": pos_profile_doc.selling_price_list
-                                },
-                                ["price_list_rate", "uom"],
-                                as_dict=1,
-                        )
+		# Enrich items with price, stock, and barcode data
+		for item in items:
+			# Get price
+			price = frappe.db.get_value(
+				"Item Price",
+				{
+					"item_code": item["item_code"],
+					"price_list": pos_profile_doc.selling_price_list
+				},
+				["price_list_rate", "uom"],
+				as_dict=1,
+			)
 
-                        if price:
-                                item["rate"] = price.get("price_list_rate") or 0
-                                item["price_list_rate"] = price.get("price_list_rate") or 0
-                                item["uom"] = price.get("uom") or item.get("stock_uom")
-                        else:
-                                item["rate"] = 0
-                                item["price_list_rate"] = 0
-                                item["uom"] = item.get("stock_uom")
+			if price:
+				item["rate"] = price.get("price_list_rate") or 0
+				item["price_list_rate"] = price.get("price_list_rate") or 0
+				item["uom"] = price.get("uom") or item.get("stock_uom")
+			else:
+				item["rate"] = 0
+				item["price_list_rate"] = 0
+				item["uom"] = item.get("stock_uom")
 
 			# Get stock if warehouse specified
 			if pos_profile_doc.warehouse and item.get("is_stock_item"):

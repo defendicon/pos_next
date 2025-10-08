@@ -1260,43 +1260,45 @@ async function autoApplyOffers() {
 
 		const result = await applyOffersResource.submit({ invoice_data: invoiceData })
 
-		if (result && result.items) {
-			let hasDiscounts = false
-			const discountedItems = []
+                if (result && result.items) {
+                        let hasDiscounts = false
 
-			// Collect items with discounts
-			result.items.forEach(serverItem => {
-				const cartItem = invoiceItems.value.find(i => i.item_code === serverItem.item_code)
-				if (cartItem && serverItem.discount_percentage > 0) {
-					discountedItems.push({
-						item: cartItem,
-						discount_percentage: serverItem.discount_percentage,
-						discount_amount: serverItem.discount_amount || 0
-					})
-					hasDiscounts = true
-				}
-			})
+                        const discountMap = new Map(
+                                result.items.map(serverItem => [serverItem.item_code, serverItem])
+                        )
 
-			// Apply all discounts at once using the composable
-			if (hasDiscounts) {
-				discountedItems.forEach(({ item, discount_percentage, discount_amount }) => {
-					item.discount_percentage = discount_percentage
-					item.discount_amount = discount_amount
-					updateItemQuantity(item.item_code, item.quantity)
-				})
+                        invoiceItems.value.forEach(cartItem => {
+                                const serverItem = discountMap.get(cartItem.item_code) || {}
+                                const serverDiscountPercentage = serverItem.discount_percentage || 0
+                                const serverDiscountAmount = serverItem.discount_amount || 0
+                                const serverHasDiscount =
+                                        serverDiscountPercentage > 0 || serverDiscountAmount > 0
 
-				autoAppliedOffer.value = { name: "Auto Offer", applied: true }
+                                if (serverHasDiscount) {
+                                        cartItem.discount_percentage = serverDiscountPercentage
+                                        cartItem.discount_amount = serverDiscountAmount
+                                        hasDiscounts = true
+                                } else if (cartItem.discount_percentage || cartItem.discount_amount) {
+                                        cartItem.discount_percentage = 0
+                                        cartItem.discount_amount = 0
+                                }
 
-				toast.create({
-					title: "Offers Applied",
-					text: "Eligible offers have been applied to your cart",
-					icon: "check",
-					iconClasses: "text-green-600",
-				})
-			} else {
-				autoAppliedOffer.value = null
-			}
-		}
+                                updateItemQuantity(cartItem.item_code, cartItem.quantity)
+                        })
+
+                        if (hasDiscounts) {
+                                autoAppliedOffer.value = { name: "Auto Offer", applied: true }
+
+                                toast.create({
+                                        title: "Offers Applied",
+                                        text: "Eligible offers have been applied to your cart",
+                                        icon: "check",
+                                        iconClasses: "text-green-600",
+                                })
+                        } else {
+                                autoAppliedOffer.value = null
+                        }
+                }
 	} catch (error) {
 		// Silently fail - don't interrupt the user experience
 		console.error("Error auto-applying offers:", error)

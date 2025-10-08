@@ -1260,43 +1260,56 @@ async function autoApplyOffers() {
 
 		const result = await applyOffersResource.submit({ invoice_data: invoiceData })
 
-		if (result && result.items) {
-			let hasDiscounts = false
-			const discountedItems = []
+                if (result && result.items) {
+                        const previouslyApplied = !!autoAppliedOffer.value
+                        let hasDiscounts = false
+                        const serverItemsMap = new Map()
 
-			// Collect items with discounts
-			result.items.forEach(serverItem => {
-				const cartItem = invoiceItems.value.find(i => i.item_code === serverItem.item_code)
-				if (cartItem && serverItem.discount_percentage > 0) {
-					discountedItems.push({
-						item: cartItem,
-						discount_percentage: serverItem.discount_percentage,
-						discount_amount: serverItem.discount_amount || 0
-					})
-					hasDiscounts = true
-				}
-			})
+                        result.items.forEach(serverItem => {
+                                if (serverItem?.item_code) {
+                                        serverItemsMap.set(serverItem.item_code, serverItem)
+                                }
+                        })
 
-			// Apply all discounts at once using the composable
-			if (hasDiscounts) {
-				discountedItems.forEach(({ item, discount_percentage, discount_amount }) => {
-					item.discount_percentage = discount_percentage
-					item.discount_amount = discount_amount
-					updateItemQuantity(item.item_code, item.quantity)
-				})
+                        invoiceItems.value.forEach(cartItem => {
+                                const serverItem = serverItemsMap.get(cartItem.item_code)
+                                const discountPercentage = parseFloat(serverItem?.discount_percentage) || 0
+                                const discountAmount = parseFloat(serverItem?.discount_amount) || 0
 
-				autoAppliedOffer.value = { name: "Auto Offer", applied: true }
+                                cartItem.discount_percentage = discountPercentage
+                                cartItem.discount_amount = discountAmount
 
-				toast.create({
-					title: "Offers Applied",
-					text: "Eligible offers have been applied to your cart",
-					icon: "check",
-					iconClasses: "text-green-600",
-				})
-			} else {
-				autoAppliedOffer.value = null
-			}
-		}
+                                if (discountPercentage > 0 || discountAmount > 0) {
+                                        hasDiscounts = true
+                                }
+
+                                updateItemQuantity(cartItem.item_code, cartItem.quantity)
+                        })
+
+                        if (hasDiscounts) {
+                                autoAppliedOffer.value = { name: "Auto Offer", applied: true }
+
+                                if (!previouslyApplied) {
+                                        toast.create({
+                                                title: "Offers Applied",
+                                                text: "Eligible offers have been applied to your cart",
+                                                icon: "check",
+                                                iconClasses: "text-green-600",
+                                        })
+                                }
+                        } else {
+                                autoAppliedOffer.value = null
+
+                                if (previouslyApplied) {
+                                        toast.create({
+                                                title: "Offers Removed",
+                                                text: "Offers no longer apply to the current cart items",
+                                                icon: "info",
+                                                iconClasses: "text-blue-600",
+                                        })
+                                }
+                        }
+                }
 	} catch (error) {
 		// Silently fail - don't interrupt the user experience
 		console.error("Error auto-applying offers:", error)

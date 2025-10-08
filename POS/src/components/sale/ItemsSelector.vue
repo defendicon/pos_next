@@ -371,24 +371,25 @@ const props = defineProps({
 	posProfile: String,
 	cartItems: {
 		type: Array,
-		default: () => []
+		default: () => [],
 	},
 	currency: {
 		type: String,
-		default: 'USD'
-	}
+		default: "USD",
+	},
 })
 
 const emit = defineEmits(["item-selected"])
 
 // Use Pinia store
 const itemStore = useItemSearchStore()
-const { filteredItems, searchTerm, selectedItemGroup, itemGroups, loading } = storeToRefs(itemStore)
+const { filteredItems, searchTerm, selectedItemGroup, itemGroups, loading } =
+	storeToRefs(itemStore)
 
 // Local state
-const viewMode = ref('grid')
+const viewMode = ref("grid")
 const lastKeyTime = ref(0)
-const barcodeBuffer = ref('')
+const barcodeBuffer = ref("")
 const searchInputRef = ref(null)
 const scannerEnabled = ref(false)
 const itemThreshold = ref(50) // Threshold for auto-switching to list view
@@ -413,38 +414,54 @@ const totalPages = computed(() => {
 })
 
 // Watch for cart items and pos profile changes
-watch(() => props.cartItems, (newCartItems) => {
-	itemStore.setCartItems(newCartItems)
-}, { immediate: true, deep: true })
+watch(
+	() => props.cartItems,
+	(newCartItems) => {
+		itemStore.setCartItems(newCartItems)
+	},
+	{ immediate: true, deep: true },
+)
 
-watch(() => props.posProfile, (newProfile) => {
-	if (newProfile) {
-		itemStore.setPosProfile(newProfile)
-	}
-}, { immediate: true })
+watch(
+	() => props.posProfile,
+	(newProfile) => {
+		if (newProfile) {
+			itemStore.setPosProfile(newProfile)
+		}
+	},
+	{ immediate: true },
+)
 
 // Reset to page 1 when filtered items change
-watch(filteredItems, (newItems) => {
-	if (!newItems) return
+watch(
+	filteredItems,
+	(newItems) => {
+		if (!newItems) return
 
-	const itemCount = newItems.length
+		const itemCount = newItems.length
 
-	// Reset pagination when items change
-	currentPage.value = 1
+		// Reset pagination when items change
+		currentPage.value = 1
 
-	// Only auto-switch if user hasn't manually set a preference
-	// and we're in grid view with many items
-	if (!userManuallySetView.value && viewMode.value === 'grid' && itemCount > itemThreshold.value) {
-		viewMode.value = 'list'
+		// Only auto-switch if user hasn't manually set a preference
+		// and we're in grid view with many items
+		if (
+			!userManuallySetView.value &&
+			viewMode.value === "grid" &&
+			itemCount > itemThreshold.value
+		) {
+			viewMode.value = "list"
 
-		toast.create({
-			title: "Switched to List View",
-			text: `Displaying ${itemCount} items - automatically switched to list view for better performance`,
-			icon: "list",
-			iconClasses: "text-blue-600",
-		})
-	}
-}, { immediate: false })
+			toast.create({
+				title: "Switched to List View",
+				text: `Displaying ${itemCount} items - automatically switched to list view for better performance`,
+				icon: "list",
+				iconClasses: "text-blue-600",
+			})
+		}
+	},
+	{ immediate: false },
+)
 
 onMounted(() => {
 	if (props.posProfile) {
@@ -459,10 +476,10 @@ function handleKeyDown(event) {
 	const timeDiff = currentTime - lastKeyTime.value
 
 	// If Enter is pressed, always trigger search
-	if (event.key === 'Enter') {
+	if (event.key === "Enter") {
 		event.preventDefault()
 		handleBarcodeSearch()
-		barcodeBuffer.value = ''
+		barcodeBuffer.value = ""
 		return
 	}
 
@@ -472,7 +489,7 @@ function handleKeyDown(event) {
 		barcodeBuffer.value += event.key
 	} else {
 		// Manual typing - reset buffer
-		barcodeBuffer.value = event.key.length === 1 ? event.key : ''
+		barcodeBuffer.value = event.key.length === 1 ? event.key : ""
 	}
 
 	lastKeyTime.value = currentTime
@@ -515,7 +532,7 @@ async function handleBarcodeSearch() {
 			return
 		}
 	} catch (error) {
-		console.error('Barcode API error:', error)
+		console.error("Barcode API error:", error)
 	}
 
 	// Fallback: If only one item matches in filtered results, auto-select it
@@ -565,7 +582,7 @@ function toggleBarcodeScanner() {
 
 	// Focus on search input when enabling scanner
 	if (scannerEnabled.value) {
-		const input = searchInputRef.value || document.getElementById('item-search')
+		const input = searchInputRef.value || document.getElementById("item-search")
 		if (input) {
 			input.focus()
 		}

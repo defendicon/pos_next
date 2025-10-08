@@ -388,12 +388,12 @@ const props = defineProps({
 	posProfile: String,
 	currency: {
 		type: String,
-		default: 'USD'
+		default: "USD",
 	},
 	appliedOffer: {
 		type: Object,
-		default: null
-	}
+		default: null,
+	},
 })
 
 const emit = defineEmits([
@@ -425,12 +425,12 @@ const customersResource = createResource({
 	url: "pos_next.api.customers.get_customers",
 	makeParams() {
 		return {
-			search_term: "",  // Empty to get all customers
+			search_term: "", // Empty to get all customers
 			pos_profile: props.posProfile,
-			limit: 9999  // Get all customers
+			limit: 9999, // Get all customers
 		}
 	},
-	auto: true,  // Auto-load on mount
+	auto: true, // Auto-load on mount
 	async onSuccess(data) {
 		const customers = data?.message || data || []
 		allCustomers.value = customers
@@ -442,7 +442,7 @@ const customersResource = createResource({
 	},
 	onError(error) {
 		console.error("Error loading customers:", error)
-	}
+	},
 })
 
 // Load offers resource
@@ -450,26 +450,26 @@ const offersResource = createResource({
 	url: "pos_next.api.offers.get_offers",
 	makeParams() {
 		return {
-			pos_profile: props.posProfile
+			pos_profile: props.posProfile,
 		}
 	},
 	auto: true,
 	onSuccess(data) {
 		const offers = data?.message || data || []
-		console.log('✓ Loaded offers:', offers.length, offers)
+		console.log("✓ Loaded offers:", offers.length, offers)
 
 		// Filter only auto-apply offers that are eligible
-		const eligible = offers.filter(offer =>
-			offer.auto && !offer.coupon_based &&
-			checkOfferEligibility(offer)
+		const eligible = offers.filter(
+			(offer) =>
+				offer.auto && !offer.coupon_based && checkOfferEligibility(offer),
 		)
 
-		console.log('✓ Eligible offers:', eligible.length, eligible)
+		console.log("✓ Eligible offers:", eligible.length, eligible)
 		availableOffers.value = eligible.slice(0, 3) // Show top 3
 	},
 	onError(error) {
-		console.error('Error loading offers:', error)
-	}
+		console.error("Error loading offers:", error)
+	},
 })
 
 // Load gift cards resource
@@ -478,34 +478,42 @@ const giftCardsResource = createResource({
 	makeParams() {
 		return {
 			customer: props.customer?.name || props.customer,
-			company: props.posProfile // Will get company from profile
+			company: props.posProfile, // Will get company from profile
 		}
 	},
 	auto: false,
 	onSuccess(data) {
 		availableGiftCards.value = data?.message || data || []
-	}
+	},
 })
 
 // Watch for customer changes to load their gift cards
-watch(() => props.customer, (newCustomer) => {
-	if (newCustomer && props.posProfile) {
-		giftCardsResource.reload()
-	} else {
-		availableGiftCards.value = []
-	}
-})
+watch(
+	() => props.customer,
+	(newCustomer) => {
+		if (newCustomer && props.posProfile) {
+			giftCardsResource.reload()
+		} else {
+			availableGiftCards.value = []
+		}
+	},
+)
 
 // Watch for cart changes to update eligible offers
-watch(() => props.grandTotal, () => {
-	if (offersResource.data) {
-		const offers = offersResource.data?.message || offersResource.data || []
-		availableOffers.value = offers.filter(offer =>
-			offer.auto && !offer.coupon_based &&
-			checkOfferEligibility(offer)
-		).slice(0, 3)
-	}
-})
+watch(
+	() => props.grandTotal,
+	() => {
+		if (offersResource.data) {
+			const offers = offersResource.data?.message || offersResource.data || []
+			availableOffers.value = offers
+				.filter(
+					(offer) =>
+						offer.auto && !offer.coupon_based && checkOfferEligibility(offer),
+				)
+				.slice(0, 3)
+		}
+	},
+)
 
 // Computed top offer for preview
 const topOffer = computed(() => {
@@ -534,15 +542,19 @@ const customerResults = computed(() => {
 	}
 
 	// Instant in-memory filter
-	return allCustomers.value.filter(cust => {
-		const name = (cust.customer_name || '').toLowerCase()
-		const mobile = (cust.mobile_no || '').toLowerCase()
-		const id = (cust.name || '').toLowerCase()
+	return allCustomers.value
+		.filter((cust) => {
+			const name = (cust.customer_name || "").toLowerCase()
+			const mobile = (cust.mobile_no || "").toLowerCase()
+			const id = (cust.name || "").toLowerCase()
 
-		return name.includes(searchValue) ||
-		       mobile.includes(searchValue) ||
-		       id.includes(searchValue)
-	}).slice(0, 20)
+			return (
+				name.includes(searchValue) ||
+				mobile.includes(searchValue) ||
+				id.includes(searchValue)
+			)
+		})
+		.slice(0, 20)
 })
 
 // Reset selection when results change
@@ -563,21 +575,27 @@ function handleSearchInput(event) {
 function handleKeydown(event) {
 	if (customerResults.value.length === 0) return
 
-	if (event.key === 'ArrowDown') {
+	if (event.key === "ArrowDown") {
 		event.preventDefault()
-		selectedIndex.value = Math.min(selectedIndex.value + 1, customerResults.value.length - 1)
-	} else if (event.key === 'ArrowUp') {
+		selectedIndex.value = Math.min(
+			selectedIndex.value + 1,
+			customerResults.value.length - 1,
+		)
+	} else if (event.key === "ArrowUp") {
 		event.preventDefault()
 		selectedIndex.value = Math.max(selectedIndex.value - 1, -1)
-	} else if (event.key === 'Enter') {
+	} else if (event.key === "Enter") {
 		event.preventDefault()
-		if (selectedIndex.value >= 0 && selectedIndex.value < customerResults.value.length) {
+		if (
+			selectedIndex.value >= 0 &&
+			selectedIndex.value < customerResults.value.length
+		) {
 			selectCustomer(customerResults.value[selectedIndex.value])
 		} else if (customerResults.value.length === 1) {
 			// Auto-select if only one result
 			selectCustomer(customerResults.value[0])
 		}
-	} else if (event.key === 'Escape') {
+	} else if (event.key === "Escape") {
 		customerSearch.value = ""
 	}
 }
@@ -633,17 +651,17 @@ function applyTopOffer() {
 
 	// Just open the offers dialog - don't set preview yet
 	// Preview will be set when user actually selects an offer in the dialog
-	emit('show-offers')
+	emit("show-offers")
 }
 
 function removeAppliedOffer() {
-	emit('remove-offer')
+	emit("remove-offer")
 }
 
 // Close dropdown when clicking outside
-if (typeof document !== 'undefined') {
-	document.addEventListener('click', (e) => {
-		if (!e.target.closest('.relative')) {
+if (typeof document !== "undefined") {
+	document.addEventListener("click", (e) => {
+		if (!e.target.closest(".relative")) {
 			customerSearch.value = ""
 		}
 	})

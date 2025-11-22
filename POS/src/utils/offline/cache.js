@@ -187,11 +187,11 @@ export const cacheCustomersFromServer = async (posProfile) => {
 	try {
 		console.log("Fetching customers from server...")
 
-		const response = await call("pos_next.api.customers.get_customers", {
-			pos_profile: posProfile,
-			start: 0,
-			limit: 9999, // Get all customers
-		})
+                const response = await call("pos_next.api.customers.get_customers", {
+                        pos_profile: posProfile,
+                        start: 0,
+                        limit: 0, // Get all customers
+                })
 
 		if (response.message && Array.isArray(response.message)) {
 			const customers = response.message
@@ -236,25 +236,33 @@ export const searchCachedItems = async (searchTerm = "", limit = 50) => {
 
 // Search customers in cache
 export const searchCachedCustomers = async (searchTerm = "", limit = 50) => {
-	try {
-		if (!searchTerm) {
-			return await db.customers.limit(limit).toArray()
-		}
+        try {
+                const shouldLimit = Number.isFinite(limit) && limit > 0
 
-		const term = searchTerm.toLowerCase()
+                if (!searchTerm) {
+                        return shouldLimit
+                                ? await db.customers.limit(limit).toArray()
+                                : await db.customers.toArray()
+                }
 
-		// Search by name, mobile, or email
-		const results = await db.customers
-			.where("customer_name")
-			.startsWithIgnoreCase(term)
-			.or("mobile_no")
-			.startsWithIgnoreCase(term)
-			.or("email_id")
-			.startsWithIgnoreCase(term)
-			.limit(limit)
-			.toArray()
+                const term = searchTerm.toLowerCase()
 
-		return results
+                // Search by name, mobile, or email
+                let query = db.customers
+                        .where("customer_name")
+                        .startsWithIgnoreCase(term)
+                        .or("mobile_no")
+                        .startsWithIgnoreCase(term)
+                        .or("email_id")
+                        .startsWithIgnoreCase(term)
+
+                if (shouldLimit) {
+                        query = query.limit(limit)
+                }
+
+                const results = await query.toArray()
+
+                return results
 	} catch (error) {
 		console.error("Error searching cached customers:", error)
 		return []

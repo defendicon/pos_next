@@ -574,13 +574,16 @@ async function searchCachedItems(searchTerm = "", limit = 50) {
 
 // Search cached customers
 async function searchCachedCustomers(searchTerm = "", limit = 20) {
-	try {
-		const db = await initDB()
-		const term = searchTerm.toLowerCase()
+        try {
+                const db = await initDB()
+                const term = searchTerm.toLowerCase()
+                const limitValue = Number.isFinite(limit) && limit > 0 ? limit : null
 
-		if (!term) {
-			return await db.table("customers").limit(limit).toArray()
-		}
+                if (!term) {
+                        return limitValue
+                                ? await db.table("customers").limit(limitValue).toArray()
+                                : await db.table("customers").toArray()
+                }
 
 		// Get all customers and filter in memory for 'includes' behavior
 		// This is fast because IndexedDB is already in-memory for small datasets
@@ -593,10 +596,10 @@ async function searchCachedCustomers(searchTerm = "", limit = 20) {
 				const id = (cust.name || "").toLowerCase()
 
 				return name.includes(term) || mobile.includes(term) || id.includes(term)
-			})
-			.slice(0, limit)
+                        })
+                        .slice(0, limitValue || undefined)
 
-		return results
+                return results
 	} catch (error) {
 		log.error("Error searching cached customers", error)
 		return []

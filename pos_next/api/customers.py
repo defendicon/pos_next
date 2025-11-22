@@ -5,6 +5,7 @@ Handles customer search, creation, and management for POS operations
 
 import frappe
 from frappe import _
+from frappe.utils import cint
 
 
 @frappe.whitelist()
@@ -34,15 +35,21 @@ def get_customers(search_term="", pos_profile=None, limit=20):
 				filters["customer_group"] = profile_doc.customer_group
 				frappe.logger().debug(f"Filtering by customer_group: {profile_doc.customer_group}")
 
-		# Return all customers (for client-side filtering)
-		filters["disabled"] = 0
-		result = frappe.get_all(
-			"Customer",
-			filters=filters,
-			fields=["name", "customer_name", "mobile_no", "email_id"],
-			limit=limit,
-			order_by="customer_name asc"
-		)
+                # Return all customers (for client-side filtering)
+                filters["disabled"] = 0
+
+                # If limit is 0 or negative, fetch the exact customer count to return all
+                limit_value = cint(limit)
+                if limit_value <= 0:
+                        limit_value = frappe.db.count("Customer", filters)
+
+                result = frappe.get_all(
+                        "Customer",
+                        filters=filters,
+                        fields=["name", "customer_name", "mobile_no", "email_id"],
+                        limit=limit_value,
+                        order_by="customer_name asc"
+                )
 		frappe.logger().debug(f"get_customers returned {len(result)} customers")
 		return result
 	except Exception as e:

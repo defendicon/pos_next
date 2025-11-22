@@ -833,10 +833,8 @@ const profileWarehouses = computed(() => {
         return []
 })
 
-const activePriceList = computed(() => cartStore.activePriceList)
-
 watch(
-        activePriceList,
+        () => cartStore.activePriceList.value,
         async (newPriceList, oldPriceList) => {
                 if (newPriceList === oldPriceList || !shiftStore.profileName) {
                         return

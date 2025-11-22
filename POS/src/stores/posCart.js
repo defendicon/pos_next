@@ -64,7 +64,10 @@ export const usePOSCartStore = defineStore("posCart", () => {
                         posProfile.value?.price_list ||
                         null
 
-                if (settingsStore.isEnabled && settingsStore.useCustomerPriceList) {
+                if (
+                        settingsStore.isEnabled.value &&
+                        settingsStore.useCustomerPriceList.value
+                ) {
                         const customerPriceList =
                                 customer.value?.default_price_list || customer.value?.price_list
 

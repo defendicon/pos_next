@@ -30,11 +30,12 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 		create_only_sales_order: 0,
 		allow_return_without_invoice: 0,
 		allow_free_batch_return: 0,
-		allow_print_draft_invoices: 0,
-		// Pricing & Display
-		decimal_precision: "2",
-		// Customer Settings
-		allow_customer_purchase_order: 0,
+                allow_print_draft_invoices: 0,
+                // Pricing & Display
+                decimal_precision: "2",
+                use_customer_price_list: 0,
+                // Customer Settings
+                allow_customer_purchase_order: 0,
 		allow_duplicate_customer_names: 0,
 		fetch_coupon: 0,
 		// Printing
@@ -134,10 +135,13 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 	const allowCustomerPurchaseOrder = computed(() =>
 		Boolean(settings.value.allow_customer_purchase_order),
 	)
-	const allowDuplicateCustomerNames = computed(() =>
-		Boolean(settings.value.allow_duplicate_customer_names),
-	)
-	const fetchCoupon = computed(() => Boolean(settings.value.fetch_coupon))
+        const allowDuplicateCustomerNames = computed(() =>
+                Boolean(settings.value.allow_duplicate_customer_names),
+        )
+        const fetchCoupon = computed(() => Boolean(settings.value.fetch_coupon))
+        const useCustomerPriceList = computed(() =>
+                Boolean(settings.value.use_customer_price_list),
+        )
 
 	// Computed - Printing
 	const allowPrintLastInvoice = computed(() =>
@@ -237,11 +241,12 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 			allow_select_sales_order: 0,
 			create_only_sales_order: 0,
 			allow_return_without_invoice: 0,
-			allow_free_batch_return: 0,
-			allow_print_draft_invoices: 0,
-			decimal_precision: "2",
-			allow_customer_purchase_order: 0,
-			allow_duplicate_customer_names: 0,
+                        allow_free_batch_return: 0,
+                        allow_print_draft_invoices: 0,
+                        decimal_precision: "2",
+                        use_customer_price_list: 0,
+                        allow_customer_purchase_order: 0,
+                        allow_duplicate_customer_names: 0,
 			fetch_coupon: 0,
 			allow_print_last_invoice: 0,
 			silent_print: 0,
@@ -344,12 +349,13 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 		allowPrintDraftInvoices,
 
 		// Computed - Pricing & Display
-		decimalPrecision,
+                decimalPrecision,
 
-		// Computed - Customer Settings
-		allowCustomerPurchaseOrder,
-		allowDuplicateCustomerNames,
-		fetchCoupon,
+                // Computed - Customer Settings
+                allowCustomerPurchaseOrder,
+                allowDuplicateCustomerNames,
+                fetchCoupon,
+                useCustomerPriceList,
 
 		// Computed - Printing
 		allowPrintLastInvoice,

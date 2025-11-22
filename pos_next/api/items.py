@@ -806,7 +806,7 @@ def _calculate_bundle_availability_bulk(bundle_codes, warehouse):
 
 
 @frappe.whitelist()
-def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20):
+def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20, price_list=None):
 	"""Get items for POS with stock, price, and tax details"""
 	try:
 		pos_profile_doc = frappe.get_cached_doc("POS Profile", pos_profile)
@@ -937,17 +937,17 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 					conversion_map[row.parent][row.uom] = row.conversion_factor
 
 		# UOM-specific prices - batch query ALL prices for all items
-		if item_codes:
-			prices = frappe.db.sql(
-				"""
-				SELECT item_code, uom, price_list_rate
-				FROM `tabItem Price`
-				WHERE item_code IN %s AND price_list = %s
-				ORDER BY item_code, uom
-				""",
-				[item_codes, pos_profile_doc.selling_price_list],
-				as_dict=1,
-			)
+                if item_codes:
+                        prices = frappe.db.sql(
+                                """
+                                SELECT item_code, uom, price_list_rate
+                                FROM `tabItem Price`
+                                WHERE item_code IN %s AND price_list = %s
+                                ORDER BY item_code, uom
+                                """,
+                                [item_codes, selected_price_list],
+                                as_dict=1,
+                        )
 			for price in prices:
 				uom_prices_map.setdefault(price["item_code"], {})[price["uom"]] = price["price_list_rate"]
 
@@ -1024,16 +1024,16 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 			if not price_row and item.get("has_variants"):
 				variant_prices = frappe.db.sql(
 					"""
-					SELECT MIN(ip.price_list_rate) as min_price
-					FROM `tabItem Price` ip
-					INNER JOIN `tabItem` i ON i.name = ip.item_code
-					WHERE i.variant_of = %s
-					AND ip.price_list = %s
-					AND i.disabled = 0
-					""",
-					[item["item_code"], pos_profile_doc.selling_price_list],
-					as_dict=1,
-				)
+                                        SELECT MIN(ip.price_list_rate) as min_price
+                                        FROM `tabItem Price` ip
+                                        INNER JOIN `tabItem` i ON i.name = ip.item_code
+                                        WHERE i.variant_of = %s
+                                        AND ip.price_list = %s
+                                        AND i.disabled = 0
+                                        """,
+                                        [item["item_code"], selected_price_list],
+                                        as_dict=1,
+                                )
 				derived_price = (
 					variant_prices[0]["min_price"]
 					if variant_prices and variant_prices[0].get("min_price")
@@ -1064,12 +1064,14 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 				display_rate = flt(derived_price)
 				display_uom = stock_uom
 
-			item["rate"] = display_rate
-			item["price_list_rate"] = display_rate
-			item["uom"] = display_uom
-			item["price_uom"] = display_uom
-			item["conversion_factor"] = 1
-			item["price_list_rate_price_uom"] = display_rate
+                        item["rate"] = display_rate
+                        item["price_list_rate"] = display_rate
+                        item["uom"] = display_uom
+                        item["price_uom"] = display_uom
+                        item["conversion_factor"] = 1
+                        item["price_list_rate_price_uom"] = display_rate
+                        item["selling_price_list"] = selected_price_list
+                        item["price_list"] = selected_price_list
 
 			# ===================================================================
 			# STOCK QUANTITY ASSIGNMENT: Stock Items vs Product Bundles
@@ -1132,7 +1134,7 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 
 
 @frappe.whitelist()
-def get_item_details(item_code, pos_profile, customer=None, qty=1, uom=None):
+def get_item_details(item_code, pos_profile, customer=None, qty=1, uom=None, price_list=None):
 	"""Get detailed item info including price, tax, stock"""
 	try:
 		# Parse pos_profile if it's a JSON string
@@ -1149,8 +1151,11 @@ def get_item_details(item_code, pos_profile, customer=None, qty=1, uom=None):
 		if not pos_profile:
 			frappe.throw(_("POS Profile is required"))
 
-		pos_profile_doc = frappe.get_cached_doc("POS Profile", pos_profile)
-		item_doc = frappe.get_cached_doc("Item", item_code)
+                pos_profile_doc = frappe.get_cached_doc("POS Profile", pos_profile)
+                item_doc = frappe.get_cached_doc("Item", item_code)
+
+                # Prefer explicitly provided price list (e.g., from Customer), fallback to POS Profile
+                selected_price_list = price_list or pos_profile_doc.selling_price_list
 
 		# Check if item is allowed for sales
 		if not item_doc.is_sales_item:
@@ -1170,12 +1175,12 @@ def get_item_details(item_code, pos_profile, customer=None, qty=1, uom=None):
 		if uom:
 			item["uom"] = uom
 
-		return get_item_detail(
-			item=json.dumps(item),
-			warehouse=pos_profile_doc.warehouse,
-			price_list=pos_profile_doc.selling_price_list,
-			company=pos_profile_doc.company,
-		)
+                return get_item_detail(
+                        item=json.dumps(item),
+                        warehouse=pos_profile_doc.warehouse,
+                        price_list=selected_price_list,
+                        company=pos_profile_doc.company,
+                )
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Get Item Details Error")
 		frappe.throw(_("Error fetching item details: {0}").format(str(e)))

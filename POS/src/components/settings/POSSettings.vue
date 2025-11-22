@@ -257,16 +257,21 @@
 											<h4 class="text-sm font-semibold text-gray-900">Pricing & Discounts</h4>
 										</div>
 										<div class="space-y-3">
-											<CheckboxField
-												v-model="settings.tax_inclusive"
-												label="Tax Inclusive"
-												description="When enabled, displayed prices include tax. When disabled, tax is calculated separately. Changes apply immediately to your cart when you save."
-											/>
-											<NumberField
-												v-model="settings.max_discount_allowed"
-												label="Max Discount (%)"
-												description="Maximum discount per item"
-												:min="0"
+                                                                                        <CheckboxField
+                                                                                                v-model="settings.tax_inclusive"
+                                                                                                label="Tax Inclusive"
+                                                                                                description="When enabled, displayed prices include tax. When disabled, tax is calculated separately. Changes apply immediately to your cart when you save."
+                                                                                        />
+                                                                                        <CheckboxField
+                                                                                                v-model="settings.use_customer_price_list"
+                                                                                                label="Use Customer Price List"
+                                                                                                description="When enabled, pricing follows the selected customer's default price list. Disable to always use the POS Profile price list."
+                                                                                        />
+                                                                                        <NumberField
+                                                                                                v-model="settings.max_discount_allowed"
+                                                                                                label="Max Discount (%)"
+                                                                                                description="Maximum discount per item"
+                                                                                                :min="0"
 												:max="100"
 											/>
 											<CheckboxField
@@ -384,23 +389,24 @@ const loading = ref(true)
 const saving = ref(false)
 const warehousesList = ref([])
 const selectedWarehouse = ref(props.currentWarehouse || "")
-const settings = ref({
-	pos_profile: props.posProfile || "",
-	enabled: 1,
-	// Core Settings
-	max_discount_allowed: 0,
-	use_percentage_discount: 0,
-	allow_user_to_edit_additional_discount: 0,
-	allow_user_to_edit_item_discount: 1,
-	disable_rounded_total: 1,
-	allow_credit_sale: 0,
-	allow_return: 0,
-	allow_write_off_change: 0,
-	allow_partial_payment: 0,
-	silent_print: 0,
-	allow_negative_stock: 0,
-	tax_inclusive: 0,
-})
+        const settings = ref({
+                pos_profile: props.posProfile || "",
+                enabled: 1,
+                // Core Settings
+                max_discount_allowed: 0,
+                use_percentage_discount: 0,
+                allow_user_to_edit_additional_discount: 0,
+                allow_user_to_edit_item_discount: 1,
+                disable_rounded_total: 1,
+                allow_credit_sale: 0,
+                allow_return: 0,
+                allow_write_off_change: 0,
+                allow_partial_payment: 0,
+                silent_print: 0,
+                allow_negative_stock: 0,
+                tax_inclusive: 0,
+                use_customer_price_list: 0,
+        })
 
 // Stock Sync Settings (localStorage persisted)
 const stockSyncEnabled = ref(false)

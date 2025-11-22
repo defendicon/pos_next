@@ -36,6 +36,7 @@
   "section_break_pricing",
   "decimal_precision",
   "tax_inclusive",
+  "use_customer_price_list",
   "section_break_customer",
   "allow_customer_purchase_order",
   "allow_duplicate_customer_names",
@@ -272,6 +273,13 @@
    "fieldtype": "Check",
    "label": "Tax Inclusive",
    "description": "Automatically set taxes as included in item prices. When enabled, displayed prices include tax amounts."
+  },
+  {
+   "default": "0",
+   "fieldname": "use_customer_price_list",
+   "fieldtype": "Check",
+   "label": "Use Customer Price List",
+   "description": "When enabled, the POS will price items using the selected customer's default price list. Disable to always use the POS Profile price list."
   },
   {
    "collapsible": 1,

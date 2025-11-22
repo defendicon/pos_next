@@ -815,10 +815,10 @@ watch(
 
 // Computed for warehouses - returns all warehouses for the company
 const profileWarehouses = computed(() => {
-	if (warehousesList.value.length > 0) {
-		return warehousesList.value.map((w) => ({
-			name: w.name,
-			warehouse: w.warehouse_name || w.name,
+        if (warehousesList.value.length > 0) {
+                return warehousesList.value.map((w) => ({
+                        name: w.name,
+                        warehouse: w.warehouse_name || w.name,
 		}))
 	}
 	// Fallback to profile warehouse if API hasn't loaded yet
@@ -829,9 +829,31 @@ const profileWarehouses = computed(() => {
 				warehouse: shiftStore.profileWarehouse,
 			},
 		]
-	}
-	return []
+        }
+        return []
 })
+
+const activePriceList = computed(() => cartStore.activePriceList)
+
+watch(
+        activePriceList,
+        async (newPriceList, oldPriceList) => {
+                if (newPriceList === oldPriceList || !shiftStore.profileName) {
+                        return
+                }
+
+                itemStore.setPriceList(newPriceList)
+
+                if (itemsSelectorRef.value) {
+                        await itemsSelectorRef.value.loadItems()
+                }
+
+                if (cartStore.invoiceItems.length > 0) {
+                        await cartStore.refreshPricesForPriceList(newPriceList)
+                }
+        },
+        { immediate: true },
+)
 
 // Resize state
 let resizeState = null
@@ -979,7 +1001,7 @@ onMounted(async () => {
 		} else {
 			// Set POS profile and load tax rules
 			if (shiftStore.currentProfile) {
-				cartStore.posProfile = shiftStore.profileName
+                                cartStore.posProfile = shiftStore.currentProfile
 				cartStore.posOpeningShift = shiftStore.currentShift?.name
 
 				// Load POS Settings
@@ -1303,7 +1325,7 @@ onUnmounted(() => {
 async function handleShiftOpened() {
 	uiStore.showOpenShiftDialog = false
 	if (shiftStore.currentProfile) {
-		cartStore.posProfile = shiftStore.profileName
+                cartStore.posProfile = shiftStore.currentProfile
 		cartStore.posOpeningShift = shiftStore.currentShift?.name
 		// Load POS Settings first to get tax_inclusive setting
 		await posSettingsStore.loadSettings(shiftStore.profileName)
@@ -1598,21 +1620,22 @@ async function handleOptionSelected(option) {
 				showSuccess(`${variant.item_name} added to cart`)
 			}
 		} else if (option.type === "uom") {
-			const itemDetails = await cartStore.getItemDetailsResource.submit({
-				item_code: cartStore.pendingItem.item_code,
-				pos_profile: cartStore.posProfile,
-				customer: cartStore.customer?.name || cartStore.customer,
-				qty: cartStore.pendingItemQty,
-				uom: option.uom,
-			})
+                        const itemDetails = await cartStore.getItemDetailsResource.submit({
+                                item_code: cartStore.pendingItem.item_code,
+                                pos_profile: cartStore.posProfile,
+                                customer: cartStore.customer?.name || cartStore.customer,
+                                qty: cartStore.pendingItemQty,
+                                uom: option.uom,
+                                price_list: activePriceList.value,
+                        })
 
-			const itemToAdd = {
-				...cartStore.pendingItem,
-				uom: option.uom,
-				conversion_factor: option.conversion_factor,
-				rate: itemDetails.price_list_rate || itemDetails.rate,
-				price_list_rate: itemDetails.price_list_rate,
-			}
+                        const itemToAdd = {
+                                ...cartStore.pendingItem,
+                                uom: option.uom,
+                                conversion_factor: option.conversion_factor,
+                                rate: itemDetails?.price_list_rate ?? itemDetails?.rate ?? 0,
+                                price_list_rate: itemDetails?.price_list_rate ?? 0,
+                        }
 
 			if (itemToAdd.has_batch_no || itemToAdd.has_serial_no) {
 				cartStore.setPendingItem(itemToAdd, cartStore.pendingItemQty)

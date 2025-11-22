@@ -612,10 +612,10 @@ async function searchCachedCustomers(searchTerm = "", limit = 20) {
  * @param {Array<Object>} items - Items to cache
  * @returns {Promise<Object>} Result with count and timing
  */
-async function cacheItemsFromServer(items) {
-	if (!items || items.length === 0) {
-		return { success: true, count: 0, duration: 0 }
-	}
+async function cacheItemsFromServer(items, priceListOverride = null) {
+        if (!items || items.length === 0) {
+                return { success: true, count: 0, duration: 0 }
+        }
 
 	const startTime = performance.now()
 
@@ -640,16 +640,20 @@ async function cacheItemsFromServer(items) {
 
 				// Extract and bulk insert prices
 				// CRITICAL: Compound primary key requires valid price_list AND item_code
-				const prices = batch
-					.filter(item => {
-						// Must have item_code (mandatory)
-						if (!item.item_code) return false
+                                const prices = batch
+                                        .filter(item => {
+                                                // Must have item_code (mandatory)
+                                                if (!item.item_code) return false
 						// Must have some price data
 						return item.rate || item.price_list_rate
 					})
 					.map(item => {
 						// Provide default price_list if missing (prevents key constraint violations)
-						const priceList = item.selling_price_list || item.price_list || "Standard"
+                                                const priceList =
+                                                        priceListOverride ||
+                                                        item.selling_price_list ||
+                                                        item.price_list ||
+                                                        "Standard"
 
 						return {
 							price_list: priceList,
@@ -1314,9 +1318,12 @@ self.onmessage = async (event) => {
 				result = await searchCachedCustomers(payload.searchTerm, payload.limit)
 				break
 
-			case "CACHE_ITEMS":
-				result = await cacheItemsFromServer(payload.items)
-				break
+                        case "CACHE_ITEMS":
+                                result = await cacheItemsFromServer(
+                                        payload.items,
+                                        payload.priceList,
+                                )
+                                break
 
 			case "CACHE_CUSTOMERS":
 				result = await cacheCustomersFromServer(payload.customers)

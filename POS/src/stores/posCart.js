@@ -55,9 +55,26 @@ export const usePOSCartStore = defineStore("posCart", () => {
 	const { showSuccess, showError, showWarning } = useToast()
 
 	// Computed
-	const itemCount = computed(() => invoiceItems.value.length)
-	const isEmpty = computed(() => invoiceItems.value.length === 0)
-	const hasCustomer = computed(() => !!customer.value)
+        const itemCount = computed(() => invoiceItems.value.length)
+        const isEmpty = computed(() => invoiceItems.value.length === 0)
+        const hasCustomer = computed(() => !!customer.value)
+        const activePriceList = computed(() => {
+                const profilePriceList =
+                        posProfile.value?.selling_price_list ||
+                        posProfile.value?.price_list ||
+                        null
+
+                if (settingsStore.isEnabled && settingsStore.useCustomerPriceList) {
+                        const customerPriceList =
+                                customer.value?.default_price_list || customer.value?.price_list
+
+                        if (customerPriceList) {
+                                return customerPriceList
+                        }
+                }
+
+                return profilePriceList
+        })
 
 	// Actions
 	function addItem(item, qty = 1, autoAdd = false, currentProfile = null) {
@@ -566,21 +583,23 @@ export const usePOSCartStore = defineStore("posCart", () => {
 			const cartItem = invoiceItems.value.find((i) => i.item_code === itemCode)
 			if (!cartItem) return
 
-			const itemDetails = await getItemDetailsResource.submit({
-				item_code: itemCode,
-				pos_profile: posProfile.value,
-				customer: customer.value?.name || customer.value,
-				qty: cartItem.quantity,
-				uom: newUom,
-			})
+                        const itemDetails = await getItemDetailsResource.submit({
+                                item_code: itemCode,
+                                pos_profile: posProfile.value,
+                                customer: customer.value?.name || customer.value,
+                                qty: cartItem.quantity,
+                                uom: newUom,
+                                price_list: activePriceList.value,
+                        })
 
 			const uomData = cartItem.item_uoms?.find((u) => u.uom === newUom)
 
 			cartItem.uom = newUom
 			cartItem.conversion_factor =
 				uomData?.conversion_factor || itemDetails.conversion_factor || 1
-			cartItem.rate = itemDetails.price_list_rate || itemDetails.rate
-			cartItem.price_list_rate = itemDetails.price_list_rate
+                        const newRate = itemDetails?.price_list_rate ?? itemDetails?.rate ?? 0
+                        cartItem.rate = newRate
+                        cartItem.price_list_rate = itemDetails?.price_list_rate ?? 0
 
 			recalculateItem(cartItem)
 
@@ -591,23 +610,24 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		}
 	}
 
-	async function updateItemDetails(itemCode, updatedDetails) {
-		try {
-			const cartItem = invoiceItems.value.find((i) => i.item_code === itemCode)
-			if (!cartItem) {
-				throw new Error("Item not found in cart")
+        async function updateItemDetails(itemCode, updatedDetails) {
+                try {
+                        const cartItem = invoiceItems.value.find((i) => i.item_code === itemCode)
+                        if (!cartItem) {
+                                throw new Error("Item not found in cart")
 			}
 
 			// If UOM changed, fetch new rate from server
 			if (updatedDetails.uom && updatedDetails.uom !== cartItem.uom) {
 				try {
-					const itemDetails = await getItemDetailsResource.submit({
-						item_code: itemCode,
-						pos_profile: posProfile.value,
-						customer: customer.value?.name || customer.value,
-						qty: updatedDetails.quantity || cartItem.quantity,
-						uom: updatedDetails.uom,
-					})
+                                        const itemDetails = await getItemDetailsResource.submit({
+                                                item_code: itemCode,
+                                                pos_profile: posProfile.value,
+                                                customer: customer.value?.name || customer.value,
+                                                qty: updatedDetails.quantity || cartItem.quantity,
+                                                uom: updatedDetails.uom,
+                                                price_list: activePriceList.value,
+                                        })
 
 					const uomData = cartItem.item_uoms?.find(
 						(u) => u.uom === updatedDetails.uom,
@@ -617,8 +637,13 @@ export const usePOSCartStore = defineStore("posCart", () => {
 					cartItem.uom = updatedDetails.uom
 					cartItem.conversion_factor =
 						uomData?.conversion_factor || itemDetails.conversion_factor || 1
-					cartItem.rate = itemDetails.price_list_rate || itemDetails.rate
-					cartItem.price_list_rate = itemDetails.price_list_rate
+                                        const updatedRate =
+                                                itemDetails?.price_list_rate ??
+                                                itemDetails?.rate ??
+                                                0
+                                        cartItem.rate = updatedRate
+                                        cartItem.price_list_rate =
+                                                itemDetails?.price_list_rate ?? 0
 				} catch (error) {
 					console.warn(
 						"Failed to fetch UOM details, using provided rate:",
@@ -663,9 +688,45 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		} catch (error) {
 			console.error("Error updating item details:", error)
 			showError(parseError(error) || "Failed to update item. Please try again.")
-			return false
-		}
-	}
+                        return false
+                }
+        }
+
+        async function refreshPricesForPriceList(priceListOverride = null) {
+                if (invoiceItems.value.length === 0) {
+                        return
+                }
+
+                const priceListToUse = priceListOverride || activePriceList.value
+
+                for (const item of invoiceItems.value) {
+                        try {
+                                const itemDetails = await getItemDetailsResource.submit({
+                                        item_code: item.item_code,
+                                        pos_profile: posProfile.value,
+                                        customer: customer.value?.name || customer.value,
+                                        qty: item.quantity,
+                                        uom: item.uom,
+                                        price_list: priceListToUse,
+                                })
+
+                                const newRate =
+                                        itemDetails?.price_list_rate ?? itemDetails?.rate ?? 0
+
+                                item.rate = newRate
+                                item.price_list_rate = itemDetails?.price_list_rate ?? 0
+
+                                recalculateItem(item)
+                        } catch (error) {
+                                console.error(
+                                        `Error refreshing price for ${item.item_code}:`,
+                                        error,
+                                )
+                        }
+                }
+
+                rebuildIncrementalCache()
+        }
 
 	// Performance: Cache previous item codes hash to avoid unnecessary recalculations
 	let previousItemCodesHash = ""
@@ -673,7 +734,7 @@ export const usePOSCartStore = defineStore("posCart", () => {
 	let cachedItemGroups = []
 	let cachedBrands = []
 
-	function syncOfferSnapshot() {
+        function syncOfferSnapshot() {
 		// Only sync if values are initialized
 		if (subtotal.value !== undefined && invoiceItems.value) {
 			// Create hash for item codes to detect actual changes
@@ -743,29 +804,30 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		{ immediate: true, flush: "post" },
 	)
 
-	return {
-		// State
-		invoiceItems,
-		customer,
-		subtotal,
-		totalTax,
-		totalDiscount,
-		grandTotal,
-		posProfile,
-		posOpeningShift,
-		payments,
-		additionalDiscount,
-		taxInclusive,
-		pendingItem,
-		pendingItemQty,
-		appliedOffers,
-		appliedCoupon,
-		selectionMode,
-		suppressOfferReapply,
-		// Computed
-		itemCount,
-		isEmpty,
-		hasCustomer,
+        return {
+                // State
+                invoiceItems,
+                customer,
+                subtotal,
+                totalTax,
+                totalDiscount,
+                grandTotal,
+                posProfile,
+                posOpeningShift,
+                payments,
+                additionalDiscount,
+                taxInclusive,
+                pendingItem,
+                pendingItemQty,
+                appliedOffers,
+                appliedCoupon,
+                selectionMode,
+                suppressOfferReapply,
+                activePriceList,
+                // Computed
+                itemCount,
+                isEmpty,
+                hasCustomer,
 
 		// Actions
 		addItem,
@@ -782,14 +844,15 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		applyDiscountToCart,
 		removeDiscountFromCart,
 		applyOffer,
-		removeOffer,
-		reapplyOffer,
-		changeItemUOM,
-		updateItemDetails,
-		getItemDetailsResource,
-		recalculateItem,
-		rebuildIncrementalCache,
-		applyOffersResource,
+                removeOffer,
+                reapplyOffer,
+                changeItemUOM,
+                updateItemDetails,
+                refreshPricesForPriceList,
+                getItemDetailsResource,
+                recalculateItem,
+                rebuildIncrementalCache,
+                applyOffersResource,
 		buildInvoiceDataForOffers,
 	}
 })

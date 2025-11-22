@@ -24,12 +24,13 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 	const searchTerm = ref("")
 	const selectedItemGroup = ref(null)
 	const itemGroups = ref([])
-	const profileItemGroups = ref([]) // Item groups from POS Profile filter
-	const loading = ref(false)
-	const loadingMore = ref(false)
-	const searching = ref(false) // Separate loading state for search
-	const posProfile = ref(null)
-	const cartItems = ref([])
+        const profileItemGroups = ref([]) // Item groups from POS Profile filter
+        const loading = ref(false)
+        const loadingMore = ref(false)
+        const searching = ref(false) // Separate loading state for search
+        const posProfile = ref(null)
+        const priceList = ref(null)
+        const cartItems = ref([])
 
 	// Sorting state - for user-triggered sorting filters
 	const sortBy = ref(null) // Options: 'name', 'quantity', 'item_group', null (no sorting)
@@ -130,13 +131,17 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 			const groupObjects = groups.map(g => ({ item_group: g }))
 
 			// Reuse the standard fetch function
-			const items = await fetchItemsFromGroups(profile, groupObjects)
+                        const items = await fetchItemsFromGroups(
+                                profile,
+                                groupObjects,
+                                priceList.value,
+                        )
 
-			if (items.length > 0) {
-				await offlineWorker.cacheItems(items)
-				log.success(`Cached ${items.length} items from ${groups.length} group(s)`)
-				return items.length
-			}
+                        if (items.length > 0) {
+                                await offlineWorker.cacheItems(items, priceList.value)
+                                log.success(`Cached ${items.length} items from ${groups.length} group(s)`)
+                                return items.length
+                        }
 
 			return 0
 		} catch (error) {
@@ -586,8 +591,10 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 			return
 		}
 
-		posProfile.value = profile
-		loading.value = true
+                posProfile.value = profile
+                loading.value = true
+
+                const effectivePriceList = priceList.value || null
 
 		// Reset pagination state
 		currentOffset.value = 0
@@ -724,7 +731,11 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 
 				// Parallel fetch from multiple groups for optimal performance
 				// Example: Fetch "Bundles" (500 items) + "Electronics" (300 items) simultaneously
-				const fetchedItems = await fetchItemsFromGroups(profile, itemGroupFilters)
+                                const fetchedItems = await fetchItemsFromGroups(
+                                        profile,
+                                        itemGroupFilters,
+                                        effectivePriceList,
+                                )
 
 				// CRITICAL: Store ALL fetched items (not just first page)
 				// Why? Client-side filtering needs complete dataset to switch between groups instantly
@@ -741,7 +752,10 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 
 				if (fetchedItems.length > 0) {
 					// Cache ALL filtered items for offline use
-					await offlineWorker.cacheItems(fetchedItems)
+                                        await offlineWorker.cacheItems(
+                                                fetchedItems,
+                                                effectivePriceList,
+                                        )
 					cacheReady.value = true
 
 					// Mark data as fresh - prevents redundant fetches on page refresh
@@ -762,13 +776,14 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 				log.debug(`Fetching ${itemsPerPage.value} items (no filters)`)
 
 				// Fetch first batch (e.g., 20-50 items) for fast initial render
-				const response = await call("pos_next.api.items.get_items", {
-					pos_profile: profile,
-					search_term: "",
-					item_group: null, // No filter - get items from all groups
-					start: 0,
-					limit: itemsPerPage.value,
-				})
+                                const response = await call("pos_next.api.items.get_items", {
+                                        pos_profile: profile,
+                                        search_term: "",
+                                        item_group: null, // No filter - get items from all groups
+                                        start: 0,
+                                        limit: itemsPerPage.value,
+                                        price_list: effectivePriceList,
+                                })
 				const list = response?.message || response || []
 
 				if (list.length > 0) {
@@ -782,7 +797,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 					hasMore.value = true
 
 					// Cache first batch for offline support
-					await offlineWorker.cacheItems(list)
+                                        await offlineWorker.cacheItems(list, effectivePriceList)
 
 					// Mark data as fresh
 					serverDataFresh.value = true
@@ -821,21 +836,22 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 	 * Fetch items from specific item groups in parallel
 	 * Returns merged and deduplicated results
 	 */
-	async function fetchItemsFromGroups(profile, itemGroups) {
-		const fetchPromises = itemGroups.map(async (groupObj) => {
-			const itemGroup = groupObj.item_group
-			try {
-				const response = await call("pos_next.api.items.get_items", {
-					pos_profile: profile,
-					search_term: "",
-					item_group: itemGroup,
-					start: 0,
-					limit: 1000, // Get all items from this group
-				})
-				const items = response?.message || response || []
-				log.debug(`Fetched ${items.length} items from group: ${itemGroup}`)
-				return items
-			} catch (error) {
+        async function fetchItemsFromGroups(profile, itemGroups, priceListOverride = null) {
+                const fetchPromises = itemGroups.map(async (groupObj) => {
+                        const itemGroup = groupObj.item_group
+                        try {
+                                const response = await call("pos_next.api.items.get_items", {
+                                        pos_profile: profile,
+                                        search_term: "",
+                                        item_group: itemGroup,
+                                        start: 0,
+                                        limit: 1000, // Get all items from this group
+                                        price_list: priceListOverride,
+                                })
+                                const items = response?.message || response || []
+                                log.debug(`Fetched ${items.length} items from group: ${itemGroup}`)
+                                return items
+                        } catch (error) {
 				log.error(`Failed to fetch items from group: ${itemGroup}`, error)
 				return []
 			}
@@ -954,13 +970,14 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 			// Fetch next batch from server
 			// start: currentOffset (e.g., 50 after first batch)
 			// limit: itemsPerPage (e.g., 50 items per batch)
-			const response = await call("pos_next.api.items.get_items", {
-				pos_profile: posProfile.value,
-				search_term: "",
-				item_group: null, // No filter - get items from all groups
-				start: currentOffset.value,
-				limit: itemsPerPage.value,
-			})
+                        const response = await call("pos_next.api.items.get_items", {
+                                pos_profile: posProfile.value,
+                                search_term: "",
+                                item_group: null, // No filter - get items from all groups
+                                start: currentOffset.value,
+                                limit: itemsPerPage.value,
+                                price_list: priceList.value,
+                        })
 			const list = response?.message || response || []
 
 			if (list.length > 0) {
@@ -976,7 +993,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 				hasMore.value = list.length === itemsPerPage.value
 
 				// Cache new batch for offline support
-				await offlineWorker.cacheItems(list)
+                                await offlineWorker.cacheItems(list, priceList.value)
 
 				log.debug(`Loaded ${list.length} more items, total: ${totalItemsLoaded.value}`)
 			} else {
@@ -1035,18 +1052,19 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 		const fetchBatch = async () => {
 			try {
 				log.debug(`Background sync: fetching batch at offset ${offset}`)
-				const response = await call("pos_next.api.items.get_items", {
-					pos_profile: profile,
-					search_term: "",
-					item_group: null, // No filters for background sync
-					start: offset,
-					limit: batchSize,
-				})
+                                const response = await call("pos_next.api.items.get_items", {
+                                        pos_profile: profile,
+                                        search_term: "",
+                                        item_group: null, // No filters for background sync
+                                        start: offset,
+                                        limit: batchSize,
+                                        price_list: priceList.value,
+                                })
 				const list = response?.message || response || []
 
 				if (list.length > 0) {
 					// Cache the batch
-					await offlineWorker.cacheItems(list)
+                                await offlineWorker.cacheItems(list, priceList.value)
 					offset += list.length
 					batchCount++
 
@@ -1153,14 +1171,15 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 
 					// Now search server in background for fresh results
 					log.debug(`Searching server for: "${term}"`)
-					const response = await call("pos_next.api.items.get_items", {
-						pos_profile: posProfile.value,
-						search_term: term,
-						item_group: selectedItemGroup.value,
-						start: 0,
-						limit: searchLimit, // Dynamically adjusted based on device performance
-					})
-					const serverResults = response?.message || response || []
+                                        const response = await call("pos_next.api.items.get_items", {
+                                                pos_profile: posProfile.value,
+                                                search_term: term,
+                                                item_group: selectedItemGroup.value,
+                                                start: 0,
+                                                limit: searchLimit, // Dynamically adjusted based on device performance
+                                                price_list: priceList.value,
+                                        })
+                                        const serverResults = response?.message || response || []
 
 					if (serverResults.length > 0) {
 						// Update with fresh server results
@@ -1168,7 +1187,10 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 						log.success(`Found ${serverResults.length} items on server`)
 
 						// Cache server results for future searches
-						await offlineWorker.cacheItems(serverResults)
+                                                await offlineWorker.cacheItems(
+                                                        serverResults,
+                                                        priceList.value,
+                                                )
 
 						// If we didn't resolve with cache, resolve with server results
 						if (!cached || cached.length === 0) {
@@ -1338,10 +1360,17 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 	/**
 	 * Update cart items - delegates to stock store
 	 */
-	function setCartItems(items) {
-		cartItems.value = items
-		stockStore.reserve(items) // Simple!
-	}
+        function setCartItems(items) {
+                cartItems.value = items
+                stockStore.reserve(items) // Simple!
+        }
+
+        function setPriceList(newPriceList) {
+            priceList.value = newPriceList || null
+            // Invalidate caches so fresh prices are fetched for the new price list
+            serverDataFresh.value = false
+            clearBaseCache()
+        }
 
 	/**
 	 * Set POS Profile and load item group filters
@@ -1367,13 +1396,18 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 				})
 
 				// Extract item_groups from the profile
-				if (data?.pos_profile?.item_groups) {
-					profileItemGroups.value = data.pos_profile.item_groups
-					log.info(`Loaded ${profileItemGroups.value.length} item group filters from POS Profile`)
-				} else {
-					profileItemGroups.value = []
-					log.info("No item group filters in POS Profile")
-				}
+                                if (data?.pos_profile?.item_groups) {
+                                        profileItemGroups.value = data.pos_profile.item_groups
+                                        log.info(`Loaded ${profileItemGroups.value.length} item group filters from POS Profile`)
+                                } else {
+                                        profileItemGroups.value = []
+                                        log.info("No item group filters in POS Profile")
+                                }
+
+                                // Initialize price list from POS Profile if not already set
+                                if (!priceList.value) {
+                                        priceList.value = data?.pos_profile?.selling_price_list || null
+                                }
 
 				// Set up real-time listener for POS Profile updates
 				posProfileUpdateCleanup = onPosProfileUpdate(async (updateData) => {
@@ -1416,15 +1450,16 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 		selectedItemGroup,
 		itemGroups,
 		profileItemGroups,
-		loading,
-		loadingMore,
-		searching,
-		posProfile,
-		cartItems,
-		hasMore,
-		totalItemsLoaded,
-		currentOffset,
-		cacheReady,
+                loading,
+                loadingMore,
+                searching,
+                posProfile,
+                priceList,
+                cartItems,
+                hasMore,
+                totalItemsLoaded,
+                currentOffset,
+                cacheReady,
 		cacheSyncing,
 		cacheStats,
 		sortBy,
@@ -1446,10 +1481,11 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 		getItem,
 		setSearchTerm,
 		clearSearch,
-		setSelectedItemGroup,
-		setCartItems, // Delegates to stock store for reservations
-		setPosProfile,
-		startBackgroundCacheSync,
+                setSelectedItemGroup,
+                setCartItems, // Delegates to stock store for reservations
+                setPriceList,
+                setPosProfile,
+                startBackgroundCacheSync,
 		stopBackgroundCacheSync,
 		cleanup,
 		invalidateCache,

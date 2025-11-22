@@ -395,9 +395,9 @@ class OfflineWorkerClient {
 		return this.sendMessage("SEARCH_CUSTOMERS", { searchTerm, limit })
 	}
 
-	async cacheItems(items) {
-		return this.sendMessage("CACHE_ITEMS", { items })
-	}
+        async cacheItems(items, priceList = null) {
+                return this.sendMessage("CACHE_ITEMS", { items, priceList })
+        }
 
 	async cacheCustomers(customers) {
 		return this.sendMessage("CACHE_CUSTOMERS", { customers })

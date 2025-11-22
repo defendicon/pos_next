@@ -833,8 +833,11 @@ const profileWarehouses = computed(() => {
         return []
 })
 
+// Track the active price list from the cart store for reuse in watchers and handlers
+const activePriceList = computed(() => cartStore.activePriceList.value)
+
 watch(
-        () => cartStore.activePriceList.value,
+        activePriceList,
         async (newPriceList, oldPriceList) => {
                 if (newPriceList === oldPriceList || !shiftStore.profileName) {
                         return

@@ -42,55 +42,50 @@ def before_uninstall():
 
 
 def remove_custom_fields():
-	"""
-	Remove all custom fields created by POS Next
-	"""
-	try:
-		log_message("Removing custom fields", level="info")
+        """
+        Remove POS Next specific custom fields without touching other app fields
+        """
+        try:
+                log_message("Removing custom fields", level="info")
 
-		# List of custom fields to remove
-		custom_fields = [
-			"Sales Invoice-posa_pos_opening_shift",
-			"Sales Invoice-posa_is_printed",
-			# Note: Item-custom_company is shared with Nexus app
-			# Only remove if Nexus is not installed
-		]
+                custom_fields = get_custom_fields_for_cleanup()
+                removed_count = 0
+                skipped_count = 0
 
-		removed_count = 0
-		skipped_count = 0
+                for field_name in custom_fields:
+                        try:
+                                if not frappe.db.exists("Custom Field", field_name):
+                                        log_message(f"Custom Field not found: {field_name}", level="info", indent=1)
+                                        skipped_count += 1
+                                        continue
 
-		# Check if Nexus app is installed
-		nexus_installed = "nexus" in frappe.get_installed_apps()
+                                field_doc = frappe.get_doc("Custom Field", field_name)
+                                if field_doc.module and field_doc.module != "POS Next":
+                                        log_message(
+                                                f"Preserving Custom Field {field_name} (module set to {field_doc.module})",
+                                                level="info",
+                                                indent=1,
+                                        )
+                                        skipped_count += 1
+                                        continue
 
-		# Add Item-custom_company to removal list only if Nexus is not installed
-		if not nexus_installed:
-			custom_fields.append("Item-custom_company")
-		else:
-			log_message("Nexus app detected - preserving Item-custom_company field", level="info", indent=1)
+                                frappe.delete_doc("Custom Field", field_name, force=True, ignore_permissions=True)
+                                log_message(f"Removed Custom Field: {field_name}", level="info", indent=1)
+                                removed_count += 1
+                        except Exception as e:
+                                log_message(f"Error removing custom field {field_name}: {str(e)}", level="error", indent=1)
 
-		for field_name in custom_fields:
-			try:
-				if frappe.db.exists("Custom Field", field_name):
-					frappe.delete_doc("Custom Field", field_name, force=True, ignore_permissions=True)
-					log_message(f"Removed Custom Field: {field_name}", level="info", indent=1)
-					removed_count += 1
-				else:
-					log_message(f"Custom Field not found: {field_name}", level="info", indent=1)
-					skipped_count += 1
-			except Exception as e:
-				log_message(f"Error removing custom field {field_name}: {str(e)}", level="error", indent=1)
+                if removed_count > 0:
+                        log_message(f"Removed {removed_count} custom field(s)", level="success")
+                if skipped_count > 0:
+                        log_message(f"Skipped {skipped_count} field(s) (already removed or not found)", level="info")
 
-		if removed_count > 0:
-			log_message(f"Removed {removed_count} custom field(s)", level="success")
-		if skipped_count > 0:
-			log_message(f"Skipped {skipped_count} field(s) (already removed or not found)", level="info")
-
-	except Exception as e:
-		log_message(f"Error removing custom fields: {str(e)}", level="error")
-		frappe.log_error(
-			title="Custom Fields Removal Error",
-			message=frappe.get_traceback()
-		)
+        except Exception as e:
+                log_message(f"Error removing custom fields: {str(e)}", level="error")
+                frappe.log_error(
+                        title="Custom Fields Removal Error",
+                        message=frappe.get_traceback()
+                )
 
 
 def remove_print_formats():

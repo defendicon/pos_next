@@ -151,8 +151,9 @@ export function useInvoice() {
 
 	// Actions
 	function addItem(item, quantity = 1) {
+		const itemUom = item.uom || item.stock_uom
 		const existingItem = invoiceItems.value.find(
-			(i) => i.item_code === item.item_code,
+			(i) => i.item_code === item.item_code && i.uom === itemUom,
 		)
 
 		if (existingItem) {

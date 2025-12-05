@@ -68,7 +68,11 @@
                         <!-- Inline Customer Search/Selection -->
                         <div ref="customerSearchContainer" class="relative">
                                 <div v-if="customer" class="flex items-center justify-between bg-white border border-gray-200 rounded-xl p-2.5 shadow-sm">
-                                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                                        <div
+                                                class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer"
+                                                @click="clearCustomer"
+                                                :title="__('Click to change customer')"
+                                        >
                                                 <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm">
                                                         <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
@@ -704,7 +708,7 @@ import { isOffline } from "@/utils/offline"
 import { FeatherIcon } from "frappe-ui"
 import { offlineWorker } from "@/utils/offline/workerClient"
 import { createResource } from "frappe-ui"
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref, watch, nextTick } from "vue"
 import EditItemDialog from "./EditItemDialog.vue"
 
 /**
@@ -1087,8 +1091,13 @@ function selectCustomer(cust) {
  * Clear the currently selected customer.
  * Emits select-customer with null to deselect.
  */
-function clearCustomer() {
+async function clearCustomer() {
 	emit("select-customer", null)
+	await nextTick()
+	const searchInput = document.getElementById("cart-customer-search")
+	if (searchInput) {
+		searchInput.focus()
+	}
 }
 
 /**

@@ -72,15 +72,20 @@ export const useStockStore = defineStore('stock', () => {
 	// Update reservations from cart
 	const reserve = (cartItems) => {
 		reserved.value.clear()
-		cartItems?.forEach(cartItem => {
+
+		// Early return if cart is empty
+		if (!cartItems || cartItems.length === 0) return
+
+		cartItems.forEach(cartItem => {
 			const quantity = Number(cartItem.quantity) || 0
 			const factor = Number(cartItem.conversion_factor) || 1
 			const itemCode = cartItem.item_code
 
-			if (quantity > 0) {
-				const current = reserved.value.get(itemCode) || 0
-				reserved.value.set(itemCode, current + (quantity * factor))
-			}
+			// Skip invalid items
+			if (!itemCode || quantity <= 0) return
+
+			const current = reserved.value.get(itemCode) || 0
+			reserved.value.set(itemCode, current + (quantity * factor))
 		})
 	}
 

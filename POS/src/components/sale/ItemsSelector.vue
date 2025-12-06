@@ -300,12 +300,12 @@
 								'text-[10px] sm:text-xs font-bold',
 								'border-2 border-white cursor-pointer',
 								'hover:scale-110 hover:shadow-xl transition-all duration-200',
-								getStockStatus(getAvailableQty(item)).color,
-								getStockStatus(getAvailableQty(item)).textColor
+								getStockStatus(item.actual_qty ?? item.stock_qty ?? 0).color,
+								getStockStatus(item.actual_qty ?? item.stock_qty ?? 0).textColor
 							]"
 							:title="__('Click to view availability in other warehouses')"
 						>
-							{{ Math.floor(getAvailableQty(item)) }}
+							{{ Math.floor(item.actual_qty ?? item.stock_qty ?? 0) }}
 						</div>
 
 						<!-- Item Image -->
@@ -313,7 +313,7 @@
 							<!-- Image with conditional blur on hover -->
 							<div :class="[
 								'w-full h-full transition-all duration-300',
-								(item.is_stock_item || item.is_bundle) && getAvailableQty(item) <= 0 ? 'group-hover:blur-sm group-hover:brightness-75' : ''
+								(item.is_stock_item || item.is_bundle) && (item.actual_qty ?? item.stock_qty ?? 0) <= 0 ? 'group-hover:blur-sm group-hover:brightness-75' : ''
 							]">
 								<LazyImage
 									v-if="item.image"
@@ -358,7 +358,7 @@
 
 							<!-- Warehouse Availability Info Icon - Minimal centered overlay that appears on hover for out of stock items -->
 							<button
-								v-if="(item.is_stock_item || item.is_bundle) && getAvailableQty(item) <= 0"
+								v-if="(item.is_stock_item || item.is_bundle) && (item.actual_qty ?? item.stock_qty ?? 0) <= 0"
 								@click.stop="showWarehouseAvailability(item)"
 								class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"
 								:title="__('Check availability in other warehouses')"
@@ -559,12 +559,12 @@
 										'inline-block px-1.5 sm:px-3 py-0.5 sm:py-1.5 rounded-md shadow-sm',
 										'text-[10px] sm:text-sm font-bold cursor-pointer',
 										'hover:scale-105 hover:shadow-md transition-all duration-200',
-										getStockStatus(getAvailableQty(item)).color,
-										getStockStatus(getAvailableQty(item)).textColor
+										getStockStatus(item.actual_qty ?? item.stock_qty ?? 0).color,
+										getStockStatus(item.actual_qty ?? item.stock_qty ?? 0).textColor
 									]"
 									:title="__('Click to view availability in other warehouses')"
 								>
-									{{ Math.floor(getAvailableQty(item)) }}
+									{{ Math.floor(item.actual_qty ?? item.stock_qty ?? 0) }}
 								</button>
 								<span
 									v-else
@@ -1094,7 +1094,7 @@ function handleItemClick(itemCode) {
 	// - Batch/serial items - they have their own validation in the dialog
 	// - Item templates (has_variants) - variants have their own stock, template shouldn't be checked
 	// Check stock for stock items AND Product Bundles (bundles now have calculated stock)
-	const qty = Math.floor(getAvailableQty(item))
+	const qty = Math.floor(item.actual_qty ?? item.stock_qty ?? 0)
 	if ((item.is_stock_item || item.is_bundle) && !item.has_variants && !item.has_serial_no && !item.has_batch_no && qty <= 0 && settingsStore.shouldEnforceStockValidation()) {
 		showError(item.is_bundle 
 			? __('"{0}" cannot be added to cart. Bundle is out of stock. Allow Negative Stock is disabled.', [item.item_name])
@@ -1103,13 +1103,6 @@ function handleItemClick(itemCode) {
 	}
 
 	emit("item-selected", item)
-}
-
-function getAvailableQty(item) {
-	// item.actual_qty already comes from stockStore.getDisplayStock()
-	// which has ALREADY subtracted the reserved quantity (cart quantity)
-	// So we should NOT subtract it again here.
-	return item.actual_qty ?? item.stock_qty ?? 0
 }
 
 async function handleBarcodeSearch(forceAutoAdd = false) {

@@ -778,26 +778,26 @@ const props = defineProps({
  * ============================================================================
  * Events emitted to parent component for cart operations
  */
-const emit = defineEmits([
-	"update-quantity",    // (itemCode, newQty) - Update item quantity
-	"remove-item",        // (itemCode) - Remove item from cart
-	"select-customer",    // (customer) - Select/change customer
-	"create-customer",    // (searchText) - Open create customer dialog
-	"proceed-to-payment", // () - Navigate to payment screen
-	"clear-cart",         // () - Clear all items from cart
-	"save-draft",         // () - Save current cart as draft/hold order
-	"apply-coupon",       // () - Open coupon application dialog
-	"show-coupons",       // () - Show available coupons
-	"show-offers",        // () - Show available offers dialog
-	"remove-offer",       // (offerId) - Remove applied offer
-	"update-uom",         // (itemCode, newUom) - Change item's unit of measure
-	"edit-item",          // (item) - Open item edit dialog
-	"view-shift",         // () - View current shift details
-	"show-drafts",        // () - Show draft/held orders
-	"show-history",       // () - Show invoice history
-	"show-return",        // () - Open return invoice dialog
-	"close-shift",        // () - Close current shift
-])
+const emit = defineEmits({
+	"update-quantity": (itemCode, newQty, uom) => true,
+	"remove-item": (itemCode, uom) => true,
+	"select-customer": (customer) => true,
+	"create-customer": (searchText) => true,
+	"proceed-to-payment": () => true,
+	"clear-cart": () => true,
+	"save-draft": () => true,
+	"apply-coupon": () => true,
+	"show-coupons": () => true,
+	"show-offers": () => true,
+	"remove-offer": (offerId) => true,
+	"update-uom": (itemCode, newUom) => true,
+	"edit-item": (item) => true,
+	"view-shift": () => true,
+	"show-drafts": () => true,
+	"show-history": () => true,
+	"show-return": () => true,
+	"close-shift": () => true,
+})
 
 /**
  * ============================================================================

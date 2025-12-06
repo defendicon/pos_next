@@ -228,6 +228,11 @@ export function useInvoice() {
 		}
 	}
 
+	/**
+	 * Remove item from invoice
+	 * @param {string} itemCode - Item code to remove
+	 * @param {string|null} uom - Unit of Measure (optional, to target specific UOM variant)
+	 */
 	function removeItem(itemCode, uom = null) {
 		let itemToRemove
 		if (uom) {
@@ -263,6 +268,12 @@ export function useInvoice() {
 		}
 	}
 
+	/**
+	 * Update quantity of an item in invoice
+	 * @param {string} itemCode - Item code to update
+	 * @param {number} quantity - New quantity
+	 * @param {string|null} uom - Unit of Measure (optional, to target specific UOM variant)
+	 */
 	function updateItemQuantity(itemCode, quantity, uom = null) {
 		let item
 		if (uom) {

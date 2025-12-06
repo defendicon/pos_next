@@ -81,6 +81,18 @@
 
 				<!-- UOM Options (List format) -->
 				<div v-else-if="mode === 'uom' && options.length > 0">
+					<!-- Quantity Input (UOM Mode) -->
+					<div class="mb-4">
+						<label class="block text-sm font-medium text-gray-700 mb-1">{{ __('Quantity') }}</label>
+						<input
+							type="number"
+							v-model="quantity"
+							min="1"
+							class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 transition-colors"
+							@keydown.enter="confirm"
+						/>
+					</div>
+
 					<div class="flex flex-col gap-2 max-h-96 overflow-y-auto">
 						<button
 							v-for="(option, index) in options"
@@ -106,18 +118,6 @@
 								</div>
 							</div>
 						</button>
-					</div>
-
-					<!-- Quantity Input (UOM Mode) -->
-					<div class="mt-4">
-						<label class="block text-sm font-medium text-gray-700 mb-1">{{ __('Quantity') }}</label>
-						<input
-							type="number"
-							v-model="quantity"
-							min="1"
-							class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 transition-colors"
-							@keydown.enter="confirm"
-						/>
 					</div>
 				</div>
 

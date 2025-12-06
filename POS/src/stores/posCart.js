@@ -592,6 +592,9 @@ export const usePOSCartStore = defineStore("posCart", () => {
 
 			recalculateItem(cartItem)
 
+			// Rebuild cache after item update to ensure totals are accurate
+			rebuildIncrementalCache()
+
 			showSuccess(__('Unit changed to {0}', [newUom]))
 		} catch (error) {
 			console.error("Error changing UOM:", error)

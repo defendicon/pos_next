@@ -569,9 +569,9 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		}
 	}
 
-	async function changeItemUOM(itemCode, newUom) {
+	async function changeItemUOM(itemCode, newUom, currentUom = null) {
 		try {
-			const cartItem = invoiceItems.value.find((i) => i.item_code === itemCode)
+			const cartItem = invoiceItems.value.find((i) => i.item_code === itemCode && (!currentUom || i.uom === currentUom))
 			if (!cartItem) return
 
 			const itemDetails = await getItemDetailsResource.submit({
@@ -602,9 +602,9 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		}
 	}
 
-	async function updateItemDetails(itemCode, updatedDetails) {
+	async function updateItemDetails(itemCode, updatedDetails, currentUom = null) {
 		try {
-			const cartItem = invoiceItems.value.find((i) => i.item_code === itemCode)
+			const cartItem = invoiceItems.value.find((i) => i.item_code === itemCode && (!currentUom || i.uom === currentUom))
 			if (!cartItem) {
 				throw new Error("Item not found in cart")
 			}

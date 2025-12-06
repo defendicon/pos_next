@@ -228,9 +228,9 @@ export function useInvoice() {
 		}
 	}
 
-	function removeItem(itemCode) {
+	function removeItem(itemCode, uom = null) {
 		const itemToRemove = invoiceItems.value.find(
-			(i) => i.item_code === itemCode,
+			(i) => i.item_code === itemCode && (!uom || i.uom === uom),
 		)
 
 		if (itemToRemove) {
@@ -248,12 +248,15 @@ export function useInvoice() {
 		}
 
 		invoiceItems.value = invoiceItems.value.filter(
-			(i) => i.item_code !== itemCode,
+			(i) =>
+				i.item_code !== itemCode || (uom && i.uom !== uom && i.item_code === itemCode),
 		)
 	}
 
-	function updateItemQuantity(itemCode, quantity) {
-		const item = invoiceItems.value.find((i) => i.item_code === itemCode)
+	function updateItemQuantity(itemCode, quantity, uom = null) {
+		const item = invoiceItems.value.find(
+			(i) => i.item_code === itemCode && (!uom || i.uom === uom),
+		)
 		if (item) {
 			// Store old values before update for incremental cache adjustment
 			// Use price_list_rate for subtotal calculations (before discount)
@@ -295,8 +298,10 @@ export function useInvoice() {
 		}
 	}
 
-	function updateItemRate(itemCode, rate) {
-		const item = invoiceItems.value.find((i) => i.item_code === itemCode)
+	function updateItemRate(itemCode, rate, uom = null) {
+		const item = invoiceItems.value.find(
+			(i) => i.item_code === itemCode && (!uom || i.uom === uom),
+		)
 		if (item) {
 			// Store old values before update for incremental cache adjustment
 			// Use price_list_rate for subtotal calculations (before discount)
@@ -317,8 +322,10 @@ export function useInvoice() {
 		}
 	}
 
-	function updateItemDiscount(itemCode, discountPercentage) {
-		const item = invoiceItems.value.find((i) => i.item_code === itemCode)
+	function updateItemDiscount(itemCode, discountPercentage, uom = null) {
+		const item = invoiceItems.value.find(
+			(i) => i.item_code === itemCode && (!uom || i.uom === uom),
+		)
 		if (item) {
 			// Validate discount percentage (0-100)
 			let validDiscount = Number.parseFloat(discountPercentage) || 0

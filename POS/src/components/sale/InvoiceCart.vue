@@ -452,7 +452,7 @@
 								</div>
 								<button
 									type="button"
-									@click.stop="$emit('remove-item', item.item_code)"
+									@click.stop="$emit('remove-item', item.item_code, item.uom)"
 									class="text-gray-400 hover:text-red-600 active:text-red-700 transition-colors flex-shrink-0 p-0.5 -m-0.5 touch-manipulation active:scale-90"
 									:aria-label="__('Remove {0}', [item.item_name])"
 									:title="__('Remove item')"
@@ -1280,7 +1280,7 @@ function handleQuantityBlur(item) {
  * @param {String} newUom - New unit of measure (e.g., "Kg", "Box")
  */
 async function handleUomChange(item, newUom) {
-	await cartStore.changeItemUOM(item.item_code, newUom)
+		await cartStore.changeItemUOM(item.item_code, newUom, item.uom)
 	openUomDropdown.value = null // Close dropdown after selection
 	// Also emit for parent component compatibility
 	emit("update-uom", item.item_code, newUom)
@@ -1330,7 +1330,9 @@ function openEditDialog(item) {
  */
 async function handleUpdateItem(updatedItem) {
 	// Use store method to update item
-	await cartStore.updateItemDetails(updatedItem.item_code, updatedItem)
+	// Pass selectedItem.value.uom as currentUom because updatedItem might have a new UOM
+	// selectedItem is the clone made when opening the dialog, so it has the original UOM
+	await cartStore.updateItemDetails(updatedItem.item_code, updatedItem, selectedItem.value.uom)
 	// Also emit for parent component compatibility
 	emit("edit-item", updatedItem)
 }

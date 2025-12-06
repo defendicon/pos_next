@@ -228,10 +228,15 @@ export function useInvoice() {
 		}
 	}
 
-	function removeItem(itemCode) {
-		const itemToRemove = invoiceItems.value.find(
-			(i) => i.item_code === itemCode,
-		)
+	function removeItem(itemCode, uom = null) {
+		let itemToRemove
+		if (uom) {
+			itemToRemove = invoiceItems.value.find(
+				(i) => i.item_code === itemCode && i.uom === uom,
+			)
+		} else {
+			itemToRemove = invoiceItems.value.find((i) => i.item_code === itemCode)
+		}
 
 		if (itemToRemove) {
 			// Update cache incrementally (subtract removed item values)
@@ -247,9 +252,15 @@ export function useInvoice() {
 			}
 		}
 
-		invoiceItems.value = invoiceItems.value.filter(
-			(i) => i.item_code !== itemCode,
-		)
+		if (uom) {
+			invoiceItems.value = invoiceItems.value.filter(
+				(i) => !(i.item_code === itemCode && i.uom === uom),
+			)
+		} else {
+			invoiceItems.value = invoiceItems.value.filter(
+				(i) => i.item_code !== itemCode,
+			)
+		}
 	}
 
 	function updateItemQuantity(itemCode, quantity, uom = null) {

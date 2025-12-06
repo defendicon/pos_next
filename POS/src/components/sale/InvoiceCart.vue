@@ -452,7 +452,7 @@
 								</div>
 								<button
 									type="button"
-									@click.stop="$emit('remove-item', item.item_code)"
+									@click.stop="$emit('remove-item', item.item_code, item.uom)"
 									class="text-gray-400 hover:text-red-600 active:text-red-700 transition-colors flex-shrink-0 p-0.5 -m-0.5 touch-manipulation active:scale-90"
 									:aria-label="__('Remove {0}', [item.item_name])"
 									:title="__('Remove item')"
@@ -1225,7 +1225,7 @@ function decrementQuantity(item) {
 
 	if (newQty <= 0) {
 		// If quantity would be 0 or negative, remove the item
-		emit("remove-item", item.item_code)
+		emit("remove-item", item.item_code, item.uom)
 	} else {
 		emit("update-quantity", item.item_code, newQty, item.uom)
 	}
@@ -1258,7 +1258,7 @@ function handleQuantityBlur(item) {
 	// When user leaves the input field, round and validate
 	if (!item.quantity || item.quantity <= 0) {
 		// If quantity is 0 or invalid, remove the item
-		emit("remove-item", item.item_code)
+		emit("remove-item", item.item_code, item.uom)
 	} else {
 		// Round to 4 decimal places for consistency
 		const roundedQty = Math.round(item.quantity * 10000) / 10000

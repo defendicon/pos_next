@@ -80,31 +80,45 @@
 				</div>
 
 				<!-- UOM Options (List format) -->
-				<div v-else-if="mode === 'uom' && options.length > 0" class="flex flex-col gap-2 max-h-96 overflow-y-auto">
-					<button
-						v-for="(option, index) in options"
-						:key="index"
-						@click="selectOption(option)"
-						:class="[
-							'w-full text-start p-3 rounded-lg border-2 transition-all',
-							selectedOption === option
-								? 'border-blue-500 bg-blue-50'
-								: 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
-						]"
-					>
-						<div class="flex items-center justify-between">
-							<div class="flex-1">
-								<p class="text-sm font-semibold text-gray-900">{{ option.label }}</p>
-								<p class="text-xs text-gray-500">{{ option.description }}</p>
+				<div v-else-if="mode === 'uom' && options.length > 0">
+					<div class="flex flex-col gap-2 max-h-96 overflow-y-auto">
+						<button
+							v-for="(option, index) in options"
+							:key="index"
+							@click="selectOption(option)"
+							:class="[
+								'w-full text-start p-3 rounded-lg border-2 transition-all',
+								selectedOption === option
+									? 'border-blue-500 bg-blue-50'
+									: 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+							]"
+						>
+							<div class="flex items-center justify-between">
+								<div class="flex-1">
+									<p class="text-sm font-semibold text-gray-900">{{ option.label }}</p>
+									<p class="text-xs text-gray-500">{{ option.description }}</p>
+								</div>
+								<div class="text-end ms-3">
+									<p class="text-sm font-bold text-blue-600">
+										{{ formatCurrency(option.rate || 0) }}
+									</p>
+									<p class="text-xs text-gray-500">{{ option.priceLabel }}</p>
+								</div>
 							</div>
-							<div class="text-end ms-3">
-								<p class="text-sm font-bold text-blue-600">
-									{{ formatCurrency(option.rate || 0) }}
-								</p>
-								<p class="text-xs text-gray-500">{{ option.priceLabel }}</p>
-							</div>
-						</div>
-					</button>
+						</button>
+					</div>
+
+					<!-- Quantity Input (UOM Mode) -->
+					<div class="mt-4">
+						<label class="block text-sm font-medium text-gray-700 mb-1">{{ __('Quantity') }}</label>
+						<input
+							type="number"
+							v-model="quantity"
+							min="1"
+							class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 transition-colors"
+							@keydown.enter="confirm"
+						/>
+					</div>
 				</div>
 
 				<!-- No Options -->
@@ -194,6 +208,7 @@ const isOpen = computed({
 const loading = ref(false)
 const options = ref([])
 const selectedOption = ref(null)
+const quantity = ref(1)
 const selectedAttributes = ref({}) // For variant attribute selection
 
 // Computed properties for dialog customization
@@ -306,6 +321,7 @@ watch([() => props.mode, () => props.item], ([, newItem]) => {
 
 function loadOptions() {
 	selectedOption.value = null
+	quantity.value = 1
 	selectedAttributes.value = {} // Reset attribute selection
 
 	if (props.mode === "variant") {
@@ -390,7 +406,11 @@ function confirm() {
 	if (selectedOption.value) {
 		// Emit first, let parent decide if dialog should close
 		// Parent can keep dialog open by switching mode (variant → UOM)
-		emit("option-selected", selectedOption.value)
+		const option = { ...selectedOption.value }
+		if (props.mode === "uom") {
+			option.quantity = quantity.value
+		}
+		emit("option-selected", option)
 	}
 }
 

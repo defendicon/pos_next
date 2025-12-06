@@ -1633,11 +1633,12 @@ async function handleOptionSelected(option) {
 				}
 			}
 		} else if (option.type === "uom") {
+			const qty = option.quantity || cartStore.pendingItemQty
 			const itemDetails = await cartStore.getItemDetailsResource.submit({
 				item_code: cartStore.pendingItem.item_code,
 				pos_profile: cartStore.posProfile,
 				customer: cartStore.customer?.name || cartStore.customer,
-				qty: cartStore.pendingItemQty,
+				qty: qty,
 				uom: option.uom,
 			})
 
@@ -1650,12 +1651,12 @@ async function handleOptionSelected(option) {
 			}
 
 			if (itemToAdd.has_batch_no || itemToAdd.has_serial_no) {
-				cartStore.setPendingItem(itemToAdd, cartStore.pendingItemQty)
+				cartStore.setPendingItem(itemToAdd, qty)
 				uiStore.showItemSelectionDialog = false
 				uiStore.showBatchSerialDialog = true
 			} else {
 				try {
-					cartStore.addItem(itemToAdd, cartStore.pendingItemQty, false, shiftStore.currentProfile)
+					cartStore.addItem(itemToAdd, qty, false, shiftStore.currentProfile)
 					uiStore.showItemSelectionDialog = false
 					cartStore.clearPendingItem()
 					showSuccess(__('{0} ({1}) added to cart', [itemToAdd.item_name, option.uom]))

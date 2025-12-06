@@ -1210,7 +1210,7 @@ function getSmartStep(quantity) {
 function incrementQuantity(item) {
 	const step = getSmartStep(item.quantity)
 	const newQty = Math.round((item.quantity + step) * 10000) / 10000
-	emit("update-quantity", item.item_code, newQty)
+	emit("update-quantity", item.item_code, newQty, item.uom)
 }
 
 /**
@@ -1227,7 +1227,7 @@ function decrementQuantity(item) {
 		// If quantity would be 0 or negative, remove the item
 		emit("remove-item", item.item_code)
 	} else {
-		emit("update-quantity", item.item_code, newQty)
+		emit("update-quantity", item.item_code, newQty, item.uom)
 	}
 }
 
@@ -1242,7 +1242,7 @@ function updateQuantity(item, value) {
 	const qty = Number.parseFloat(value)
 	// Allow any positive number during typing (don't round yet)
 	if (!isNaN(qty) && qty > 0) {
-		emit("update-quantity", item.item_code, qty)
+		emit("update-quantity", item.item_code, qty, item.uom)
 	}
 }
 
@@ -1263,7 +1263,7 @@ function handleQuantityBlur(item) {
 		// Round to 4 decimal places for consistency
 		const roundedQty = Math.round(item.quantity * 10000) / 10000
 		if (roundedQty !== item.quantity) {
-			emit("update-quantity", item.item_code, roundedQty)
+			emit("update-quantity", item.item_code, roundedQty, item.uom)
 		}
 	}
 }

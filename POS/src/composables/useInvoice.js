@@ -252,8 +252,16 @@ export function useInvoice() {
 		)
 	}
 
-	function updateItemQuantity(itemCode, quantity) {
-		const item = invoiceItems.value.find((i) => i.item_code === itemCode)
+	function updateItemQuantity(itemCode, quantity, uom = null) {
+		let item
+		if (uom) {
+			item = invoiceItems.value.find(
+				(i) => i.item_code === itemCode && i.uom === uom,
+			)
+		} else {
+			item = invoiceItems.value.find((i) => i.item_code === itemCode)
+		}
+
 		if (item) {
 			// Store old values before update for incremental cache adjustment
 			// Use price_list_rate for subtotal calculations (before discount)

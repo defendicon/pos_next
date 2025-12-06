@@ -74,7 +74,13 @@ export const useStockStore = defineStore('stock', () => {
 		reserved.value.clear()
 		cartItems?.forEach(cartItem => {
 			const quantity = Number(cartItem.quantity) || 0
-			if (quantity > 0) reserved.value.set(cartItem.item_code, quantity)
+			const factor = Number(cartItem.conversion_factor) || 1
+			const itemCode = cartItem.item_code
+
+			if (quantity > 0) {
+				const current = reserved.value.get(itemCode) || 0
+				reserved.value.set(itemCode, current + (quantity * factor))
+			}
 		})
 	}
 

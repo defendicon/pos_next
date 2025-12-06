@@ -1106,20 +1106,10 @@ function handleItemClick(itemCode) {
 }
 
 function getAvailableQty(item) {
-	const stockQty = item.actual_qty ?? item.stock_qty ?? 0
-
-	if (!props.cartItems || props.cartItems.length === 0) {
-		return stockQty
-	}
-
-	const cartQty = props.cartItems
-		.filter(cartItem => cartItem.item_code === item.item_code)
-		.reduce((total, cartItem) => {
-			const factor = cartItem.conversion_factor || 1
-			return total + ((cartItem.quantity || 0) * factor)
-		}, 0)
-
-	return stockQty - cartQty
+	// item.actual_qty already comes from stockStore.getDisplayStock()
+	// which has ALREADY subtracted the reserved quantity (cart quantity)
+	// So we should NOT subtract it again here.
+	return item.actual_qty ?? item.stock_qty ?? 0
 }
 
 async function handleBarcodeSearch(forceAutoAdd = false) {

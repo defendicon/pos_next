@@ -293,17 +293,14 @@
 						<!-- Click to view warehouse availability -->
 						<div
 							v-if="item.is_stock_item || item.is_bundle"
-							@click.stop="showWarehouseAvailability(item)"
 							:class="[
 								'absolute -top-1.5 -end-1.5 sm:-top-2 sm:-end-2 rounded-md shadow-lg z-10',
 								'px-2 sm:px-2.5 py-1 sm:py-1',
 								'text-[10px] sm:text-xs font-bold',
-								'border-2 border-white cursor-pointer',
-								'hover:scale-110 hover:shadow-xl transition-all duration-200',
+								'border-2 border-white',
 								getStockStatus((item.actual_qty ?? item.stock_qty ?? 0)).color,
 								getStockStatus((item.actual_qty ?? item.stock_qty ?? 0)).textColor
 							]"
-							:title="__('Click to view availability in other warehouses')"
 						>
 							{{ Math.floor((item.actual_qty ?? item.stock_qty ?? 0)) }}
 						</div>
@@ -357,19 +354,14 @@
 							</div>
 
 							<!-- Warehouse Availability Info Icon - Minimal centered overlay that appears on hover for out of stock items -->
-							<button
+							<div
 								v-if="(item.is_stock_item || item.is_bundle) && (item.actual_qty ?? item.stock_qty ?? 0) <= 0"
-								@click.stop="showWarehouseAvailability(item)"
-								class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"
-								:title="__('Check availability in other warehouses')"
-								:aria-label="__('Check warehouse availability')"
+								class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10 pointer-events-none"
 							>
-								<div class="p-2.5 bg-white/80 backdrop-blur-sm rounded-full">
-									<svg class="w-6 h-6 sm:w-7 sm:h-7 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-										<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-									</svg>
+								<div class="p-2.5 bg-white/80 backdrop-blur-sm rounded-full shadow-sm">
+									<span class="text-[10px] font-bold text-gray-800">{{ __('OUT OF STOCK') }}</span>
 								</div>
-							</button>
+							</div>
 						</div>
 
 						<!-- Item Details -->
@@ -551,21 +543,18 @@
 								<div class="text-xs sm:text-sm font-semibold text-blue-600">{{ formatCurrency(item.rate || item.price_list_rate || 0) }}</div>
 							</td>
 							<td class="px-2 sm:px-3 py-2 whitespace-nowrap w-[70px] sm:w-[100px]">
-								<!-- Stock Badge - Click to view warehouse availability -->
-								<button
+								<!-- Stock Badge -->
+								<span
 									v-if="item.is_stock_item || item.is_bundle"
-									@click.stop="showWarehouseAvailability(item)"
 									:class="[
 										'inline-block px-1.5 sm:px-3 py-0.5 sm:py-1.5 rounded-md shadow-sm',
-										'text-[10px] sm:text-sm font-bold cursor-pointer',
-										'hover:scale-105 hover:shadow-md transition-all duration-200',
+										'text-[10px] sm:text-sm font-bold',
 										getStockStatus((item.actual_qty ?? item.stock_qty ?? 0)).color,
 										getStockStatus((item.actual_qty ?? item.stock_qty ?? 0)).textColor
 									]"
-									:title="__('Click to view availability in other warehouses')"
 								>
 									{{ Math.floor((item.actual_qty ?? item.stock_qty ?? 0)) }}
-								</button>
+								</span>
 								<span
 									v-else
 									class="text-xs sm:text-sm text-gray-400 italic"
@@ -714,6 +703,7 @@ import { formatCurrency as formatCurrencyUtil } from "@/utils/currency"
 import { useToast } from "@/composables/useToast"
 import { storeToRefs } from "pinia"
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
+import { useLongPress } from "@/composables/useLongPress"
 import {
 	createOptimizedClickHandler,
 	throttleRAF,
@@ -761,8 +751,8 @@ const viewMode = ref("grid")
 const lastKeyTime = ref(0)
 const barcodeBuffer = ref("")
 const searchInputRef = ref(null)
-const scannerEnabled = ref(false)
-const autoAddEnabled = ref(false)
+const scannerEnabled = ref(true) // Default true
+const autoAddEnabled = ref(true) // Default true
 const itemThreshold = ref(50) // Threshold for auto-switching to list view
 const userManuallySetView = ref(false) // Track if user manually changed view mode
 const scannerInputDetected = ref(false) // Track if current input is from scanner
@@ -854,6 +844,17 @@ const searchMode = computed(() => {
 })
 
 const searchPlaceholder = computed(() => SEARCH_PLACEHOLDERS[searchMode.value])
+
+// Focus search input whenever possible if auto/scanner mode is on
+const ensureSearchFocus = () => {
+    if ((scannerEnabled.value || autoAddEnabled.value) && searchInputRef.value) {
+        // Only focus if we're not focused on another input
+        const activeEl = document.activeElement
+        if (!activeEl || (activeEl.tagName !== 'INPUT' && activeEl.tagName !== 'TEXTAREA') || activeEl === document.body) {
+            searchInputRef.value.focus()
+        }
+    }
+}
 
 // Watch for cart items and pos profile changes (optimized - uses length + hash instead of deep watch)
 // Tracks: length, item_code, quantity, and amount to detect all cart changes including array replacements
@@ -970,6 +971,12 @@ onMounted(() => {
 
 	// Add click outside listener for sort dropdown
 	document.addEventListener('click', handleClickOutside)
+
+    // Ensure focus on mount
+    ensureSearchFocus()
+    // Periodic focus check
+    const focusInterval = setInterval(ensureSearchFocus, 2000)
+    onUnmounted(() => clearInterval(focusInterval))
 })
 
 onUnmounted(() => {
@@ -1073,13 +1080,46 @@ const optimizedClickHandlers = new Map()
 function getOptimizedClickHandler(item) {
 	const key = item.item_code
 	if (!optimizedClickHandlers.has(key)) {
+        // Use long press to show warehouse availability
+        const { click, ...longPressHandlers } = useLongPress(() => {
+            showWarehouseAvailability(item)
+        }, { delay: 1000 }) // 1s long press
+
 		// Pass item_code instead of item reference to avoid closure issues
-		const handler = createOptimizedClickHandler(() => {
-			handleItemClick(item.item_code)
+		const handler = createOptimizedClickHandler((e) => {
+		    handleItemClick(item.item_code)
 		}, {
 			feedback: true
 		})
-		optimizedClickHandlers.set(key, handler)
+
+        // Merge handlers manually
+		optimizedClickHandlers.set(key, {
+            ...handler,
+            ...longPressHandlers,
+            touchstart: (e) => {
+                longPressHandlers.touchstart(e)
+                handler.touchstart(e)
+            },
+            touchend: (e) => {
+                longPressHandlers.touchend(e)
+                handler.touchend(e)
+            },
+             mousedown: (e) => {
+                 longPressHandlers.mousedown(e)
+            },
+            mouseup: (e) => {
+                 longPressHandlers.mouseup(e)
+            },
+            mouseleave: (e) => {
+                 longPressHandlers.mouseleave(e)
+            },
+            click: (e) => {
+                longPressHandlers.click(e)
+                if (!e.defaultPrevented) {
+                     handler.click(e)
+                }
+            }
+        })
 	}
 	return optimizedClickHandlers.get(key)
 }

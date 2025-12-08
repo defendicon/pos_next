@@ -211,8 +211,13 @@ const show = computed({
 	set: (val) => emit("update:modelValue", val),
 })
 
-// Alias for template compatibility
-const customers = computed(() => filteredCustomers.value)
+// Alias for template compatibility - respect "Top 5" request when search is empty
+const customers = computed(() => {
+	if (!searchTerm.value) {
+		return filteredCustomers.value.slice(0, 5)
+	}
+	return filteredCustomers.value
+})
 
 // Show recent customers label
 const showingRecent = computed(

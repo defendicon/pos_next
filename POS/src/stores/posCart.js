@@ -56,6 +56,30 @@ export const usePOSCartStore = defineStore("posCart", () => {
 	// Toast composable
 	const { showSuccess, showError, showWarning } = useToast()
 
+	// Sound feedback
+	function playBeep() {
+		try {
+			const AudioContext = window.AudioContext || window.webkitAudioContext
+			if (!AudioContext) return
+
+			const audioCtx = new AudioContext()
+			const oscillator = audioCtx.createOscillator()
+			const gainNode = audioCtx.createGain()
+
+			oscillator.connect(gainNode)
+			gainNode.connect(audioCtx.destination)
+
+			oscillator.type = "sine"
+			oscillator.frequency.setValueAtTime(1000, audioCtx.currentTime) // 1000Hz
+			gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime) // Volume 10%
+
+			oscillator.start()
+			oscillator.stop(audioCtx.currentTime + 0.1) // 100ms duration
+		} catch (e) {
+			console.warn("Failed to play beep", e)
+		}
+	}
+
 	// Computed
 	const itemCount = computed(() => invoiceItems.value.length)
 	const isEmpty = computed(() => invoiceItems.value.length === 0)
@@ -104,6 +128,9 @@ export const usePOSCartStore = defineStore("posCart", () => {
 
 		// Add item to cart - no toast notification for performance
 		addItemToInvoice(item, qty)
+
+		// Play beep sound for feedback
+		playBeep()
 	}
 
 	function clearCart() {

@@ -1,4 +1,4 @@
-import { deleteDraft, getDraftsCount, saveDraft } from "@/utils/draftManager"
+import { deleteDraft, getDraftsCount, saveDraft, getAllDrafts } from "@/utils/draftManager"
 import { useToast } from "@/composables/useToast"
 import { defineStore } from "pinia"
 import { ref } from "vue"
@@ -9,6 +9,7 @@ export const usePOSDraftsStore = defineStore("posDrafts", () => {
 
 	// State
 	const draftsCount = ref(0)
+	const drafts = ref([])
 
 	// Actions
 	async function updateDraftsCount() {
@@ -16,6 +17,15 @@ export const usePOSDraftsStore = defineStore("posDrafts", () => {
 			draftsCount.value = await getDraftsCount()
 		} catch (error) {
 			console.error("Error getting drafts count:", error)
+		}
+	}
+
+	async function loadDrafts() {
+		try {
+			drafts.value = await getAllDrafts()
+			draftsCount.value = drafts.value.length
+		} catch (error) {
+			console.error("Error loading drafts:", error)
 		}
 	}
 
@@ -39,7 +49,7 @@ export const usePOSDraftsStore = defineStore("posDrafts", () => {
 			}
 
 			await saveDraft(draftData)
-			await updateDraftsCount()
+			await loadDrafts() // Refresh drafts list and count
 
 			showSuccess(__("Invoice saved as draft successfully"))
 
@@ -55,7 +65,7 @@ export const usePOSDraftsStore = defineStore("posDrafts", () => {
 		try {
 			// Delete the draft after loading (to prevent duplicates)
 			await deleteDraft(draft.draft_id)
-			await updateDraftsCount()
+			await loadDrafts() // Refresh drafts list and count
 
 			showSuccess(__("Draft invoice loaded successfully"))
 
@@ -71,13 +81,27 @@ export const usePOSDraftsStore = defineStore("posDrafts", () => {
 		}
 	}
 
+	async function deleteDraftById(draftId) {
+		try {
+			await deleteDraft(draftId)
+			await loadDrafts() // Refresh drafts list and count
+			showSuccess(__("Draft deleted successfully"))
+		} catch (error) {
+			console.error("Error deleting draft:", error)
+			showError(__("Failed to delete draft"))
+		}
+	}
+
 	return {
 		// State
 		draftsCount,
+		drafts,
 
 		// Actions
 		updateDraftsCount,
+		loadDrafts,
 		saveDraftInvoice,
 		loadDraft,
+		deleteDraft: deleteDraftById,
 	}
 })

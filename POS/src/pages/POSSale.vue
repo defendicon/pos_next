@@ -2080,6 +2080,8 @@ function handleManagementMenuClick(menuItem) {
 	} else if (menuItem === "invoices") {
 		// Load invoice history data before showing
 		loadInvoiceHistoryData()
+		// Load drafts data
+		draftsStore.loadDrafts()
 		showInvoiceManagement.value = true
 	} else if (menuItem === "products") {
 		// Open Stock Lookup dialog in search mode
@@ -2090,6 +2092,9 @@ function handleManagementMenuClick(menuItem) {
 // Load invoice history data
 async function loadInvoiceHistoryData() {
 	log.info("Loading invoice history data for profile:", shiftStore.profileName)
+
+	// Also reload drafts
+	await draftsStore.loadDrafts()
 
 	try {
 		// Use custom API from pos_next.api.invoices

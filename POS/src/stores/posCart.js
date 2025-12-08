@@ -51,6 +51,7 @@ export const usePOSCartStore = defineStore("posCart", () => {
 	const appliedCoupon = ref(null)
 	const selectionMode = ref("uom") // 'uom' or 'variant'
 	const suppressOfferReapply = ref(false)
+	const currentDraftId = ref(null)
 
 	// Toast composable
 	const { showSuccess, showError, showWarning } = useToast()
@@ -110,6 +111,7 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		customer.value = null
 		appliedOffers.value = []
 		appliedCoupon.value = null
+		currentDraftId.value = null
 	}
 
 	function setCustomer(selectedCustomer) {
@@ -780,6 +782,7 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		appliedCoupon,
 		selectionMode,
 		suppressOfferReapply,
+		currentDraftId,
 		// Computed
 		itemCount,
 		isEmpty,

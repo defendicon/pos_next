@@ -1517,6 +1517,9 @@ async function handlePaymentCompleted(paymentData) {
 			cartStore.salesTeam = []
 		}
 
+		// Delete draft if it exists (since we're submitting/saving invoice)
+		const draftIdToDelete = cartStore.currentDraftId
+
 		if (offlineStore.isOffline) {
 			const invoiceData = {
 				pos_profile: cartStore.posProfile,
@@ -1537,6 +1540,11 @@ async function handlePaymentCompleted(paymentData) {
 			// Reset cart hash after successful payment
 			previousCartHash = ""
 
+			// Delete draft after successful save
+			if (draftIdToDelete) {
+				draftsStore.deleteDraft(draftIdToDelete)
+			}
+
 			showSuccess(__("Invoice saved offline. Will sync when online"))
 		} else {
 			// Get item codes from cart before clearing
@@ -1553,6 +1561,11 @@ async function handlePaymentCompleted(paymentData) {
 				cartStore.clearCart()
 				// Reset cart hash after successful payment
 				previousCartHash = ""
+
+				// Delete draft after successful submission
+				if (draftIdToDelete) {
+					draftsStore.deleteDraft(draftIdToDelete)
+				}
 
 				// Refresh stock - Direct API (50-200ms), no Socket.IO lag!
 				await stockStore.refresh(soldItemCodes, shiftStore.profileWarehouse)
@@ -1696,13 +1709,14 @@ function logoutWithCloseShift() {
 }
 
 async function handleSaveDraft() {
-	const success = await draftsStore.saveDraftInvoice(
+	const savedDraft = await draftsStore.saveDraftInvoice(
 		cartStore.invoiceItems,
 		cartStore.customer,
 		cartStore.posProfile,
 		cartStore.appliedOffers,
+		cartStore.currentDraftId,
 	)
-	if (success) {
+	if (savedDraft) {
 		cartStore.clearCart()
 		// Reset cart hash when cart is saved as draft and cleared
 		previousCartHash = ""
@@ -1711,9 +1725,27 @@ async function handleSaveDraft() {
 
 async function handleLoadDraft(draft) {
 	try {
+		// If current cart has items, save it as draft before loading new one
+		if (!cartStore.isEmpty) {
+			const saved = await draftsStore.saveDraftInvoice(
+				cartStore.invoiceItems,
+				cartStore.customer,
+				cartStore.posProfile,
+				cartStore.appliedOffers,
+				cartStore.currentDraftId,
+			)
+
+			if (!saved) {
+				showError(__("Failed to save current cart. Draft loading cancelled to prevent data loss."))
+				return
+			}
+			// No need to clear here as we're about to overwrite cart contents
+		}
+
 		const draftData = await draftsStore.loadDraft(draft)
 		cartStore.invoiceItems = draftData.items
 		cartStore.setCustomer(draftData.customer)
+		cartStore.currentDraftId = draft.draft_id // Set current draft ID
 
 		// Rebuild incremental cache to recalculate totals
 		cartStore.rebuildIncrementalCache()

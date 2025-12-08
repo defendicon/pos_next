@@ -1,4 +1,4 @@
-import { deleteDraft, getDraftsCount, saveDraft, getAllDrafts } from "@/utils/draftManager"
+import { deleteDraft, getDraftsCount, saveDraft, getAllDrafts, updateDraft } from "@/utils/draftManager"
 import { useToast } from "@/composables/useToast"
 import { defineStore } from "pinia"
 import { ref } from "vue"
@@ -34,10 +34,11 @@ export const usePOSDraftsStore = defineStore("posDrafts", () => {
 		customer,
 		posProfile,
 		appliedOffers = [],
+		draftId = null,
 	) {
 		if (invoiceItems.length === 0) {
 			showWarning(__("Cannot save an empty cart as draft"))
-			return false
+			return null
 		}
 
 		try {
@@ -48,25 +49,27 @@ export const usePOSDraftsStore = defineStore("posDrafts", () => {
 				applied_offers: appliedOffers, // Save applied offers
 			}
 
-			await saveDraft(draftData)
+			let savedDraft
+			if (draftId) {
+				savedDraft = await updateDraft(draftId, draftData)
+			} else {
+				savedDraft = await saveDraft(draftData)
+			}
+
 			await loadDrafts() // Refresh drafts list and count
 
 			showSuccess(__("Invoice saved as draft successfully"))
 
-			return true
+			return savedDraft
 		} catch (error) {
 			console.error("Error saving draft:", error)
 			showError(__("Failed to save draft"))
-			return false
+			return null
 		}
 	}
 
 	async function loadDraft(draft) {
 		try {
-			// Delete the draft after loading (to prevent duplicates)
-			await deleteDraft(draft.draft_id)
-			await loadDrafts() // Refresh drafts list and count
-
 			showSuccess(__("Draft invoice loaded successfully"))
 
 			return {

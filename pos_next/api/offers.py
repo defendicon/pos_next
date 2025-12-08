@@ -13,7 +13,7 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, asdict
 import frappe
 from frappe import _
-from frappe.utils import flt, nowdate
+from frappe.utils import flt, getdate, nowdate
 
 
 # ============================================================================
@@ -477,3 +477,52 @@ def get_active_coupons(customer: str, company: str) -> List[Dict]:
 	)
 
 	return coupons
+
+
+@frappe.whitelist()
+def validate_coupon(coupon_code: str, customer: str, company: str) -> Dict:
+	"""Validate a coupon code and return its details"""
+	if not frappe.db.table_exists("POS Coupon"):
+		return {"valid": False, "message": _("Coupons are not enabled")}
+
+	date = getdate()
+
+	# Fetch coupon with case-insensitive code matching
+	# Note: coupon_code field is unique, so we can fetch directly
+	coupon = frappe.db.get_value(
+		"POS Coupon",
+		{"coupon_code": coupon_code, "company": company},
+		["*"],
+		as_dict=1
+	)
+
+	if not coupon:
+		return {"valid": False, "message": _("Invalid coupon code")}
+
+	if coupon.disabled:
+		return {"valid": False, "message": _("This coupon is disabled")}
+
+	# Check usage limits
+	if coupon.coupon_type == "Gift Card":
+		if coupon.used:
+			return {"valid": False, "message": _("This gift card has already been used")}
+	else:
+		# Promotional coupons
+		if coupon.maximum_use > 0 and coupon.used >= coupon.maximum_use:
+			return {"valid": False, "message": _("This coupon has reached its usage limit")}
+
+	# Check validity dates
+	if coupon.valid_from and coupon.valid_from > date:
+		return {"valid": False, "message": _("This coupon is not yet valid")}
+
+	if coupon.valid_upto and coupon.valid_upto < date:
+		return {"valid": False, "message": _("This coupon has expired")}
+
+	# Check customer restriction
+	if coupon.customer and coupon.customer != customer:
+		return {"valid": False, "message": _("This coupon is not valid for this customer")}
+
+	return {
+		"valid": True,
+		"coupon": coupon
+	}

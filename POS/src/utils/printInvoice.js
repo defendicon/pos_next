@@ -101,6 +101,8 @@ export function printInvoiceCustom(invoiceData) {
 					width: 80mm;
 					margin: 0;
 					max-width: 80mm;
+					font-weight: bold;
+					color: black;
 				}
 
 				.receipt {
@@ -132,7 +134,7 @@ export function printInvoiceCustom(invoiceData) {
 				}
 
 				.partial-status {
-					color: #dc3545;
+					color: #000;
 					font-weight: bold;
 					margin-bottom: 5px;
 				}
@@ -159,23 +161,24 @@ export function printInvoiceCustom(invoiceData) {
 					display: flex;
 					justify-content: space-between;
 					font-size: 11px;
-					color: #333;
+					color: #000;
 				}
 
 				.item-discount {
 					display: flex;
 					justify-content: space-between;
 					font-size: 10px;
-					color: #28a745;
+					color: #000;
 					margin-top: 2px;
 				}
 
 				.item-serials {
 					font-size: 9px;
-					color: #666;
+					color: #000;
 					margin-top: 3px;
 					padding: 3px 5px;
-					background-color: #f5f5f5;
+					background-color: #fff;
+					border: 1px dashed #000;
 					border-radius: 2px;
 				}
 
@@ -224,7 +227,7 @@ export function printInvoiceCustom(invoiceData) {
 
 				.total-paid {
 					font-weight: bold;
-					border-top: 1px solid #ccc;
+					border-top: 1px solid #000;
 					padding-top: 5px;
 					margin-top: 5px;
 				}
@@ -234,8 +237,9 @@ export function printInvoiceCustom(invoiceData) {
 					justify-content: space-between;
 					font-size: 13px;
 					font-weight: bold;
-					color: #dc3545;
-					background-color: #fff3cd;
+					color: #000;
+					background-color: #fff;
+					border: 1px solid #000;
 					padding: 8px;
 					margin-top: 8px;
 					border-radius: 4px;

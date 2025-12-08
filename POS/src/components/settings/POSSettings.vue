@@ -76,8 +76,24 @@
 
 						<!-- Settings Form -->
 						<div v-else-if="settings.pos_profile || posProfile" class="p-6 flex flex-col gap-6">
+							<!-- Tabs Navigation -->
+							<div class="flex p-1 bg-gray-200 rounded-lg self-start">
+								<button
+									@click="activeTab = 'stock'"
+									:class="['px-4 py-2 text-sm font-medium rounded-md transition-all duration-200', activeTab === 'stock' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50']"
+								>
+									{{ __('Stock Management') }}
+								</button>
+								<button
+									@click="activeTab = 'sales'"
+									:class="['px-4 py-2 text-sm font-medium rounded-md transition-all duration-200', activeTab === 'sales' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50']"
+								>
+									{{ __('Sales Management') }}
+								</button>
+							</div>
+
 							<!-- Stock Settings Section - Prominent -->
-							<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+							<div v-if="activeTab === 'stock'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
 								<div :class="stockSectionClasses.header">
 									<div class="flex items-center justify-between">
 										<div class="flex items-center gap-3">
@@ -241,7 +257,7 @@
 							</div>
 
 							<!-- Sales Management Section - Prominent -->
-							<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+							<div v-if="activeTab === 'sales'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
 								<div :class="salesSectionClasses.header">
 									<div class="flex items-center justify-between">
 										<div class="flex items-center gap-3">
@@ -397,6 +413,7 @@ const emit = defineEmits(["update:modelValue", "warehouse-changed"])
 const show = ref(props.modelValue)
 
 // State
+const activeTab = ref('stock')
 const loading = ref(true)
 const saving = ref(false)
 const warehousesList = ref([])

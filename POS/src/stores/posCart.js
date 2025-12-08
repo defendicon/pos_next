@@ -69,8 +69,10 @@ export const usePOSCartStore = defineStore("posCart", () => {
 
 		// Determine if this item should be validated for stock
 		// Include: stock items, bundles, OR items with actual_qty defined (catches misconfigured items)
+		// CRITICAL: If is_stock_item is explicitly false/0, we must skip validation even if actual_qty exists
+		const isNonStockItem = item.is_stock_item === 0 || item.is_stock_item === false
 		const hasActualQty = item.actual_qty !== undefined || item.stock_qty !== undefined
-		const shouldValidateStock = (item.is_stock_item || item.is_bundle || hasActualQty)
+		const shouldValidateStock = !isNonStockItem && (item.is_stock_item || item.is_bundle || hasActualQty)
 
 		if (currentProfile && !autoAdd && settingsStore.shouldEnforceStockValidation() && shouldValidateStock && !item.has_serial_no && !item.has_batch_no) {
 			const warehouse = item.warehouse || currentProfile.warehouse

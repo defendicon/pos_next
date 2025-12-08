@@ -37,15 +37,26 @@
 									{{ formatDateTime(draft.created_at) }}
 								</p>
 							</div>
-							<button
-								@click.stop="handleDeleteDraft(draft.draft_id)"
-								class="text-gray-400 hover:text-red-600 transition-colors p-1"
-								:title="__('Delete draft')"
-							>
-								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-								</svg>
-							</button>
+							<div class="flex items-center gap-1">
+								<button
+									@click.stop="handlePrintDraft(draft)"
+									class="text-gray-400 hover:text-blue-600 transition-colors p-1"
+									:title="__('Print draft')"
+								>
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+									</svg>
+								</button>
+								<button
+									@click.stop="handleDeleteDraft(draft.draft_id)"
+									class="text-gray-400 hover:text-red-600 transition-colors p-1"
+									:title="__('Delete draft')"
+								>
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+									</svg>
+								</button>
+							</div>
 						</div>
 
 						<!-- Items Preview -->
@@ -149,11 +160,14 @@
 <script setup>
 import { formatCurrency as formatCurrencyUtil } from "@/utils/currency"
 import { clearAllDrafts, deleteDraft, getAllDrafts } from "@/utils/draftManager"
+import { printInvoiceCustom } from "@/utils/printInvoice"
 import { useToast } from "@/composables/useToast"
+import { usePOSShiftStore } from "@/stores/posShift"
 import { Button, Dialog } from "frappe-ui"
 import { onMounted, ref, watch } from "vue"
 
 const { showSuccess, showError } = useToast()
+const shiftStore = usePOSShiftStore()
 
 const props = defineProps({
 	modelValue: Boolean,
@@ -195,6 +209,28 @@ async function loadDrafts() {
 	} catch (error) {
 		console.error("Error loading drafts:", error)
 		showError(__("Failed to load draft invoices"))
+	}
+}
+
+function handlePrintDraft(draft) {
+	try {
+		const invoiceData = {
+			name: draft.draft_id,
+			company: shiftStore.profileCompany,
+			items: draft.items,
+			payments: [],
+			grand_total: calculateTotal(draft.items),
+			posting_date: draft.created_at,
+			customer_name:
+				draft.customer?.customer_name ||
+				draft.customer?.name ||
+				draft.customer,
+			status: "Draft",
+		}
+		printInvoiceCustom(invoiceData)
+	} catch (error) {
+		console.error("Error printing draft:", error)
+		showError(__("Failed to print draft"))
 	}
 }
 

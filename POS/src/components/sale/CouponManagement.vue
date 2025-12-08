@@ -286,14 +286,17 @@
 
 									<!-- Customer field for Gift Cards -->
 									<div v-if="form.coupon_type === 'Gift Card'" class="col-span-2">
-										<FormControl
-											v-if="isCreating"
-											type="text"
-											:label="__('Customer')"
-											v-model="form.customer"
-											:placeholder="__('Customer ID or Name')"
-											required
-										/>
+										<div v-if="isCreating">
+											<label class="block text-xs font-medium text-gray-500 mb-1.5">{{ __('Customer') }} <span class="text-red-500">*</span></label>
+											<AutocompleteSelect
+												v-model="form.customer"
+												:options="customerOptions"
+												:loading="customerLoading"
+												:placeholder="__('Search customer by name or mobile...')"
+												@search="handleCustomerSearch"
+												required
+											/>
+										</div>
 										<div v-else>
 											<label class="block text-sm font-medium text-gray-700 mb-2 text-start">{{ __('Customer') }}</label>
 											<div class="px-3 py-2 bg-gray-50 rounded-lg">
@@ -553,13 +556,20 @@
 </template>
 
 <script setup>
+import AutocompleteSelect from "@/components/common/AutocompleteSelect.vue"
 import { useToast } from "@/composables/useToast"
+import { useCustomerSearchStore } from "@/stores/customerSearch"
+import { usePOSSettingsStore } from "@/stores/posSettings"
 import { Badge, Button, Card, FormControl, LoadingIndicator, createResource } from "frappe-ui"
 import { FeatherIcon } from "frappe-ui"
+import { storeToRefs } from "pinia"
 import { computed, onMounted, ref, watch } from "vue"
 import TranslatedHTML from "../common/TranslatedHTML.vue"
 
 const { showSuccess, showError, showWarning } = useToast()
+const customerStore = useCustomerSearchStore()
+const { filteredCustomers, loading: customerLoading } = storeToRefs(customerStore)
+const posSettingsStore = usePOSSettingsStore()
 
 const props = defineProps({
 	company: String,
@@ -649,6 +659,14 @@ const campaignOptions = computed(() => {
 		{ label: __("-- No Campaign --"), value: "" },
 		...campaigns.value.map(c => ({ label: c.name, value: c.name }))
 	]
+})
+
+const customerOptions = computed(() => {
+	return filteredCustomers.value.map((c) => ({
+		label: c.customer_name,
+		value: c.name,
+		subtitle: c.mobile_no || c.email_id,
+	}))
 })
 
 // Resources
@@ -812,9 +830,16 @@ watch(() => selectedCoupon.value, (val) => {
 onMounted(() => {
 	loadCoupons()
 	loadCampaigns()
+	if (posSettingsStore.settings.pos_profile) {
+		customerStore.loadAllCustomers(posSettingsStore.settings.pos_profile)
+	}
 })
 
 // Methods
+function handleCustomerSearch(query) {
+	customerStore.setSearchTerm(query)
+}
+
 function loadCoupons() {
 	loading.value = true
 	couponsResource.reload()

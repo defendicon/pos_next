@@ -13,6 +13,8 @@ def get_customer_balance(customer, company=None):
     - Outstanding amount (sales invoices)
     - Credit balance (return invoices/CNs)
     - Advance payments (unallocated payment entries)
+
+    If company is provided, results are filtered by company.
     """
     if not company:
         company = frappe.defaults.get_user_default("Company")
@@ -24,13 +26,26 @@ def get_customer_balance(customer, company=None):
     }
 
 def _get_customer_outstanding(customer, company):
-    return frappe.db.get_value(
-        "Customer",
-        customer,
-        "total_unpaid"
-    ) or 0.0
+    """
+    Calculate total outstanding amount for a customer in a specific company.
+    Uses Sales Invoice outstanding amount sum instead of Customer.total_unpaid (which is global).
+    """
+    outstanding = frappe.get_all(
+        "Sales Invoice",
+        filters={
+            "customer": customer,
+            "company": company,
+            "docstatus": 1,
+            "outstanding_amount": [">", 0]
+        },
+        fields=["SUM(outstanding_amount) as amount"]
+    )
+    return flt(outstanding[0].amount) if outstanding and outstanding[0].amount else 0.0
 
 def _get_customer_credits(customer, company):
+    """
+    Calculate total credit balance (Negative Outstanding from Returns/CNs).
+    """
     # Sum of outstanding amounts from Credit Notes (negative outstanding)
     credit_notes = frappe.get_all(
         "Sales Invoice",
@@ -44,10 +59,13 @@ def _get_customer_credits(customer, company):
         fields=["SUM(outstanding_amount) as amount"]
     )
 
-    # Negative outstanding means credit to customer, so we flip sign
+    # Negative outstanding means credit to customer, so we flip sign to return positive credit value
     return abs(flt(credit_notes[0].amount)) if credit_notes and credit_notes[0].amount else 0.0
 
 def _get_customer_advances(customer, company):
+    """
+    Calculate total unallocated advance payments.
+    """
     # Sum of unallocated payment entries
     advances = frappe.get_all(
         "Payment Entry",
@@ -156,7 +174,7 @@ def redeem_customer_credit(invoice_name, credit_data):
     sales_invoices = []
     payment_entries = []
 
-    # Normalize input format (Handle both list and dict for backward compat)
+    # Normalize input format (Handle both list and dict for backward compatibility)
     if isinstance(credit_data, dict):
         sales_invoices = credit_data.get("sales_invoices", [])
         payment_entries = credit_data.get("payment_entries", [])
@@ -246,7 +264,10 @@ def _reconcile_payment_entry(invoice_doc, payment_entry_name, amount):
 
 @frappe.whitelist()
 def get_credit_sale_summary(pos_profile):
-    """Get summary of credit sales for a POS Profile"""
+    """
+    Get summary of credit sales for a POS Profile.
+    Returns total outstanding amount and count of unpaid invoices.
+    """
     filters = {
         "outstanding_amount": [">", 0],
         "docstatus": 1,
@@ -273,7 +294,7 @@ def get_credit_invoices(pos_profile, limit=100):
     """
     Get list of outstanding credit invoices for this POS Profile's customers.
     """
-    # Refactored from raw SQL to ORM
+    # Refactored from raw SQL to ORM for better security and maintainability
     filters = {
         "outstanding_amount": [">", 0],
         "docstatus": 1,

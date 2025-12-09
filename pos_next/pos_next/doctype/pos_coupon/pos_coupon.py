@@ -10,7 +10,13 @@ from frappe.utils import getdate, today
 
 
 class POSCoupon(Document):
+    """
+    Manages coupons for POS Next.
+    Supports Promotional coupons (percentage/amount off) and Gift Cards.
+    """
+
     def autoname(self):
+        """Generate coupon code if not provided."""
         self.coupon_name = strip(self.coupon_name)
         self.name = self.coupon_name
 
@@ -21,18 +27,21 @@ class POSCoupon(Document):
                 self.coupon_code = frappe.generate_hash()[:10].upper()
 
     def validate(self):
+        """Run all validations for coupon configuration."""
         self.validate_gift_card()
         self.validate_discount_configuration()
         self.validate_amount_rules()
         self.validate_dates()
 
     def validate_gift_card(self):
+        """Ensure Gift Cards have a customer and single-use limit."""
         if self.coupon_type == "Gift Card":
             self.maximum_use = 1
             if not self.customer:
                 frappe.throw(_("Please select the customer for Gift Card."))
 
     def validate_discount_configuration(self):
+        """Validate discount type and value integrity."""
         if not self.discount_type:
             frappe.throw(_("Discount Type is required"))
 
@@ -48,19 +57,24 @@ class POSCoupon(Document):
                 frappe.throw(_("Discount Amount must be greater than 0"))
 
     def validate_amount_rules(self):
+        """Validate minimum/maximum purchase rules."""
         if self.min_amount and flt(self.min_amount) < 0:
             frappe.throw(_("Minimum Amount cannot be negative"))
         if self.max_amount and flt(self.max_amount) <= 0:
             frappe.throw(_("Maximum Discount Amount must be greater than 0"))
 
     def validate_dates(self):
+        """Validate validity period."""
         if self.valid_from and self.valid_upto:
             if getdate(self.valid_from) > getdate(self.valid_upto):
                 frappe.throw(_("Valid From date cannot be after Valid Until date"))
 
 
 def check_coupon_code(coupon_code, customer=None, company=None):
-    """Validate and return coupon details"""
+    """
+    Validate a coupon code and return its details if valid.
+    Checks: Existence, Expiry, Validity Date, Usage Limit, Company, Customer.
+    """
     res = {"coupon": None}
 
     if not coupon_code:
@@ -124,7 +138,10 @@ def check_coupon_code(coupon_code, customer=None, company=None):
 
 
 def apply_coupon_discount(coupon, cart_total, net_total=None):
-    """Calculate discount amount based on coupon configuration"""
+    """
+    Calculate the discount amount for a validated coupon.
+    Applies logic for Percentage/Amount discount and Min/Max limits.
+    """
     from frappe.utils import flt
 
     # Determine the base amount for discount calculation
@@ -163,7 +180,10 @@ def apply_coupon_discount(coupon, cart_total, net_total=None):
 
 
 def increment_coupon_usage(coupon_code):
-    """Increment the usage counter for a coupon"""
+    """
+    Increment the usage counter for a coupon.
+    Uses direct SQL update to ensure atomicity and avoid race conditions.
+    """
     try:
         if not coupon_code:
             return
@@ -184,14 +204,17 @@ def increment_coupon_usage(coupon_code):
 
 
 def decrement_coupon_usage(coupon_code):
-    """Decrement the usage counter for a coupon (for cancelled invoices)"""
+    """
+    Decrement the usage counter for a coupon (e.g., when invoice is cancelled).
+    Uses direct SQL update for atomicity.
+    """
     try:
         if not coupon_code:
             return
 
         coupon_name = frappe.db.get_value("POS Coupon", {"coupon_code": coupon_code.upper()})
         if coupon_name:
-            # Atomic update, prevent negative
+            # Atomic update, prevent negative values
             frappe.db.sql("""
                 UPDATE `tabPOS Coupon`
                 SET used = GREATEST(COALESCE(used, 0) - 1, 0)

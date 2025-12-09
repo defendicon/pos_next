@@ -11,7 +11,10 @@ from pos_next.config.security import MASTER_KEY_HASH, PROTECTION_PHRASE_HASH
 
 @frappe.whitelist(allow_guest=False)
 def get_branding_config():
-    """API endpoint to get branding configuration"""
+    """
+    API endpoint to fetch the current branding configuration.
+    Returns an obfuscated payload containing branding text, logos, and signatures.
+    """
     try:
         doc = _fetch_branding_doc()
         return _build_branding_payload(doc)
@@ -20,11 +23,13 @@ def get_branding_config():
         return get_default_config()
 
 def _fetch_branding_doc():
+    """Fetches the singleton branding document."""
     doc = frappe.get_single("BrainWise Branding")
     # Respect the enabled state - do not auto-enable on read
     return doc
 
 def _build_branding_payload(doc):
+    """Constructs the obfuscated configuration dictionary for the client."""
     return {
         "_t": base64.b64encode(doc.brand_text.encode()).decode(),
         "_l": base64.b64encode(doc.brand_name.encode()).decode(),
@@ -33,11 +38,11 @@ def _build_branding_payload(doc):
         "_sig": doc.encrypted_signature,
         "_ts": frappe.utils.now(),
         "_v": doc.enable_server_validation,
-        "_e": doc.enabled  # Return actual state
+        "_e": doc.enabled  # Return actual state (1 or 0)
     }
 
 def get_default_config():
-    """Return default branding configuration"""
+    """Return default branding configuration used as fallback."""
     return {
         "_t": base64.b64encode("Powered by".encode()).decode(),
         "_l": base64.b64encode("BrainWise".encode()).decode(),
@@ -49,7 +54,10 @@ def get_default_config():
 
 @frappe.whitelist(allow_guest=False)
 def validate_branding(client_signature=None, brand_name=None, brand_url=None):
-    """Validate branding integrity from client"""
+    """
+    Validate branding integrity from client-side.
+    Receives what the client sees and verifies it against the server's signature.
+    """
     try:
         doc = frappe.get_single("BrainWise Branding")
 
@@ -65,9 +73,11 @@ def validate_branding(client_signature=None, brand_name=None, brand_url=None):
             "brand_url": brand_url
         }
 
+        # Validate against HMAC
         is_valid = doc.validate_signature(client_data)
 
         if not is_valid:
+            # Log the incident
             doc.log_tampering({
                 "user": frappe.session.user,
                 "timestamp": frappe.utils.now(),
@@ -76,7 +86,7 @@ def validate_branding(client_signature=None, brand_name=None, brand_url=None):
                 "ip_address": frappe.local.request_ip if hasattr(frappe.local, 'request_ip') else None
             })
 
-        # Update last validation time via db_set to avoid heavy write
+        # Update last validation time via db_set to avoid heavy write/save overhead
         doc.db_set("last_validation", datetime.now())
 
         return {
@@ -90,7 +100,10 @@ def validate_branding(client_signature=None, brand_name=None, brand_url=None):
 
 @frappe.whitelist(allow_guest=False)
 def log_client_event(event_type=None, details=None):
-    """Log client-side events (clicks, removals, modifications)"""
+    """
+    Log client-side events related to branding visibility or integrity.
+    Supported events: removal, modification, hide, integrity_fail, visibility_change.
+    """
     try:
         doc = frappe.get_single("BrainWise Branding")
 
@@ -120,8 +133,9 @@ def log_client_event(event_type=None, details=None):
 @frappe.whitelist()
 def verify_master_key(master_key_input):
     """
-    API endpoint to verify master key
-    Only System Managers can check
+    API endpoint to verify if a provided master key is valid.
+    Only accessible by System Managers.
+    Does NOT modify state, just returns validation result.
     """
     if "System Manager" not in frappe.get_roles():
         frappe.throw("Only System Managers can verify the master key", frappe.PermissionError)
@@ -140,6 +154,7 @@ def verify_master_key(master_key_input):
 
         is_valid = (key_hash == MASTER_KEY_HASH and phrase_hash == PROTECTION_PHRASE_HASH)
 
+        # Audit log for security monitoring
         frappe.log_error(
             title=f"BrainWise Branding - Master Key Verification {'Success' if is_valid else 'Failed'}",
             message=json.dumps({
@@ -161,8 +176,9 @@ def verify_master_key(master_key_input):
 @frappe.whitelist()
 def generate_new_master_key():
     """
-    Generate a new master key pair (for initial setup only)
-    Only accessible by System Manager
+    Generate a new random master key pair.
+    Only accessible by System Manager.
+    WARNING: This renders the old key invalid once the hashes are updated in config.
     """
     if "System Manager" not in frappe.get_roles():
         frappe.throw("Only System Managers can generate master keys", frappe.PermissionError)

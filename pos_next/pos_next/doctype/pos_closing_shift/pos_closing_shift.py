@@ -15,12 +15,23 @@ from pos_next.api.utils.currency import get_base_value
 
 
 class POSClosingShift(Document):
+    """
+    Manages the closing of a POS Shift.
+    Aggregates sales, payments, and taxes, and calculates reconciliation differences.
+    """
+
     def validate(self):
+        """
+        Validate the closing shift.
+        Checks for duplicate shifts and ensures the opening shift is still open.
+        Computes payment reconciliation differences before saving.
+        """
         self._validate_user_shift_conflict()
         self._validate_opening_shift_status()
         self.compute_payment_differences()
 
     def _validate_user_shift_conflict(self):
+        """Ensure no other closing shift exists for this user and opening shift."""
         user = frappe.get_all(
             "POS Closing Shift",
             filters={
@@ -42,6 +53,7 @@ class POSClosingShift(Document):
             )
 
     def _validate_opening_shift_status(self):
+        """Ensure the linked POS Opening Shift is actually Open."""
         if frappe.db.get_value("POS Opening Shift", self.pos_opening_shift, "status") != "Open":
             frappe.throw(
                 _("Selected POS Opening Shift should be open."),
@@ -49,6 +61,9 @@ class POSClosingShift(Document):
             )
 
     def compute_payment_differences(self):
+        """
+        Calculate the difference between expected and actual closing amounts for payment reconciliation.
+        """
         # update the difference values in Payment Reconciliation child table
         # get default precision for site
         precision = frappe.get_cached_value("System Settings", None, "currency_precision") or 3
@@ -60,6 +75,12 @@ class POSClosingShift(Document):
         self.compute_payment_differences()
 
     def on_submit(self):
+        """
+        Finalize the closing shift.
+        - Updates the status of the Opening Shift.
+        - Deletes draft invoices (if configured).
+        - Links all sales to this closing shift to lock them.
+        """
         opening_entry = frappe.get_doc("POS Opening Shift", self.pos_opening_shift)
         opening_entry.pos_closing_shift = self.name
         opening_entry.set_status()
@@ -69,11 +90,17 @@ class POSClosingShift(Document):
         self._set_closing_entry_invoices()
 
     def on_cancel(self):
+        """
+        Cancel the closing shift.
+        - Re-opens the Opening Shift.
+        - Unlinks sales so they can be edited or re-closed.
+        """
         self._unlink_opening_shift()
         # remove links from invoices so they can be cancelled
         self._clear_closing_entry_invoices()
 
     def _unlink_opening_shift(self):
+        """Remove reference to this closing shift from the opening shift."""
         if frappe.db.exists("POS Opening Shift", self.pos_opening_shift):
             opening_entry = frappe.get_doc("POS Opening Shift", self.pos_opening_shift)
             if opening_entry.pos_closing_shift == self.name:
@@ -128,6 +155,10 @@ class POSClosingShift(Document):
             frappe.db.set_value("POS Invoice", pos_invoice, "consolidated_invoice", None)
 
     def _handle_merge_logs_for_pos_invoice(self, pos_invoice, consolidated_sales_invoices):
+        """
+        Find merge logs associated with a POS invoice and collect their consolidated invoices.
+        Cancels and deletes the merge logs.
+        """
         merge_logs = frappe.get_all(
             "POS Invoice Merge Log",
             filters={"pos_invoice": pos_invoice},
@@ -164,6 +195,7 @@ class POSClosingShift(Document):
         )
 
     def delete_draft_invoices(self):
+        """Delete draft invoices linked to this shift if configuration allows."""
         if frappe.get_value("POS Profile", self.pos_profile, "posa_allow_delete"):
             doctype = "Sales Invoice"
             data = frappe.get_all(
@@ -181,6 +213,10 @@ class POSClosingShift(Document):
 
     @frappe.whitelist()
     def get_payment_reconciliation_details(self):
+        """
+        Generate details for the Payment Reconciliation UI.
+        Returns rendered HTML or data context.
+        """
         company_currency = frappe.get_cached_value(
             "Company", self.company, "default_currency"
         )

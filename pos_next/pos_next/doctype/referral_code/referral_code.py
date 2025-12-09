@@ -9,15 +9,23 @@ from frappe.utils import flt, nowdate, add_days
 
 
 class ReferralCode(Document):
+    """
+    Manages Referral Codes for customer acquisition campaigns.
+    Generates unique referral codes and tracks their usage.
+    """
+
     def autoname(self):
+        """Generate unique referral code if not provided."""
         if not self.referral_code:
             self.referral_code = frappe.generate_hash()[:10].upper()
 
     def validate(self):
+        """Validate referral configuration."""
         self.validate_referrer_discounts()
         self.validate_referee_discounts()
 
     def validate_referrer_discounts(self):
+        """Validate rewards for the referrer (existing customer)."""
         if not self.referrer_discount_type:
             frappe.throw(_("Referrer Discount Type is required"))
 
@@ -29,6 +37,7 @@ class ReferralCode(Document):
                 frappe.throw(_("Referrer Discount Amount must be greater than 0"))
 
     def validate_referee_discounts(self):
+        """Validate rewards for the referee (new customer)."""
         if not self.referee_discount_type:
             frappe.throw(_("Referee Discount Type is required"))
 
@@ -44,7 +53,8 @@ def create_referral_code(company, customer, referrer_discount_type, referrer_dis
                         referrer_discount_amount=None, referee_discount_type="Percentage",
                         referee_discount_percentage=None, referee_discount_amount=None, campaign=None):
     """
-    Create a new referral code for a customer
+    Factory function to create a new referral code for a customer.
+    Returns existing code if one is already active for this customer/company pair.
     """
     # Validation
     if not customer or not company:
@@ -75,7 +85,11 @@ def create_referral_code(company, customer, referrer_discount_type, referrer_dis
 
 def apply_referral_code(referral_code, referee_customer):
     """
-    Apply a referral code - generates coupons for both referrer and referee
+    Apply a referral code for a new customer (referee).
+    - Validates the code.
+    - Prevents self-referral.
+    - Prevents duplicate usage (one referral per customer).
+    - Generates coupons for both parties.
     """
     if not referral_code:
         return {"valid": False, "message": _("Referral code is required")}
@@ -141,7 +155,10 @@ def generate_referee_coupon(referral, referee_customer):
     )
 
 def generate_coupon_from_referral(referral, recipient_customer, coupon_type, discount_type, percentage=None, amount=None):
-    """Generic coupon generator for referrals"""
+    """
+    Generic helper to create a POS Coupon from referral data.
+    Sets validity to 30 days and enforces single use.
+    """
     coupon = frappe.new_doc("POS Coupon")
     # Store referral code in name for tracking/uniqueness check
     coupon.coupon_name = f"Ref-{referral.referral_code}-{coupon_type[:4]}-{frappe.generate_hash()[:5]}"

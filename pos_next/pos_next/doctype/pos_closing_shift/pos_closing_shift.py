@@ -11,35 +11,16 @@ from erpnext.accounts.doctype.pos_invoice_merge_log.pos_invoice_merge_log import
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt
-
-
-def get_base_value(doc, fieldname, base_fieldname=None, conversion_rate=None):
-    """Return the value for a field in company currency."""
-
-    base_fieldname = base_fieldname or f"base_{fieldname}"
-    base_value = doc.get(base_fieldname)
-
-    if base_value not in (None, ""):
-        return flt(base_value)
-
-    value = doc.get(fieldname)
-    if value in (None, ""):
-        return 0
-
-    if conversion_rate is None:
-        conversion_rate = (
-            doc.get("conversion_rate")
-            or doc.get("exchange_rate")
-            or doc.get("target_exchange_rate")
-            or doc.get("plc_conversion_rate")
-            or 1
-        )
-
-    return flt(value) * flt(conversion_rate or 1)
+from pos_next.api.utils.currency import get_base_value
 
 
 class POSClosingShift(Document):
     def validate(self):
+        self._validate_user_shift_conflict()
+        self._validate_opening_shift_status()
+        self.compute_payment_differences()
+
+    def _validate_user_shift_conflict(self):
         user = frappe.get_all(
             "POS Closing Shift",
             filters={
@@ -60,19 +41,23 @@ class POSClosingShift(Document):
                 title=_("Invalid Period"),
             )
 
+    def _validate_opening_shift_status(self):
         if frappe.db.get_value("POS Opening Shift", self.pos_opening_shift, "status") != "Open":
             frappe.throw(
                 _("Selected POS Opening Shift should be open."),
                 title=_("Invalid Opening Entry"),
             )
-        self.update_payment_reconciliation()
 
-    def update_payment_reconciliation(self):
+    def compute_payment_differences(self):
         # update the difference values in Payment Reconciliation child table
         # get default precision for site
         precision = frappe.get_cached_value("System Settings", None, "currency_precision") or 3
         for d in self.payment_reconciliation:
             d.difference = +flt(d.closing_amount, precision) - flt(d.expected_amount, precision)
+
+    def update_payment_reconciliation(self):
+        """Deprecated alias for compute_payment_differences"""
+        self.compute_payment_differences()
 
     def on_submit(self):
         opening_entry = frappe.get_doc("POS Opening Shift", self.pos_opening_shift)
@@ -84,14 +69,17 @@ class POSClosingShift(Document):
         self._set_closing_entry_invoices()
 
     def on_cancel(self):
+        self._unlink_opening_shift()
+        # remove links from invoices so they can be cancelled
+        self._clear_closing_entry_invoices()
+
+    def _unlink_opening_shift(self):
         if frappe.db.exists("POS Opening Shift", self.pos_opening_shift):
             opening_entry = frappe.get_doc("POS Opening Shift", self.pos_opening_shift)
             if opening_entry.pos_closing_shift == self.name:
                 opening_entry.pos_closing_shift = ""
                 opening_entry.set_status()
                 opening_entry.save()
-        # remove links from invoices so they can be cancelled
-        self._clear_closing_entry_invoices()
 
     def _set_closing_entry_invoices(self):
         """Set `pos_closing_entry` on linked invoices."""
@@ -106,33 +94,15 @@ class POSClosingShift(Document):
     def _clear_closing_entry_invoices(self):
         """Clear closing shift links, cancel merge logs and cancel consolidated sales invoices."""
         consolidated_sales_invoices = set()
+
+        # 1. Collect consolidated invoices and unlink pos invoices
         for d in self.pos_transactions:
             pos_invoice = d.get("pos_invoice")
             sales_invoice = d.get("sales_invoice")
+
             if pos_invoice:
-                if frappe.db.has_column("POS Invoice", "pos_closing_entry"):
-                    frappe.db.set_value("POS Invoice", pos_invoice, "pos_closing_entry", None)
-
-                merge_logs = frappe.get_all(
-                    "POS Invoice Merge Log",
-                    filters={"pos_invoice": pos_invoice},
-                    pluck="name",
-                )
-                for log in merge_logs:
-                    log_doc = frappe.get_doc("POS Invoice Merge Log", log)
-                    for field in (
-                        "consolidated_invoice",
-                        "consolidated_credit_note",
-                    ):
-                        si = log_doc.get(field)
-                        if si:
-                            consolidated_sales_invoices.add(si)
-                    if log_doc.docstatus == 1:
-                        log_doc.cancel()
-                    frappe.delete_doc("POS Invoice Merge Log", log_doc.name, force=1)
-
-                if frappe.db.has_column("POS Invoice", "consolidated_invoice"):
-                    frappe.db.set_value("POS Invoice", pos_invoice, "consolidated_invoice", None)
+                self._unlink_pos_invoice(pos_invoice)
+                self._handle_merge_logs_for_pos_invoice(pos_invoice, consolidated_sales_invoices)
 
                 if frappe.db.has_column("POS Invoice", "status"):
                     pos_doc = frappe.get_doc("POS Invoice", pos_invoice)
@@ -144,11 +114,37 @@ class POSClosingShift(Document):
                 if self._is_consolidated_sales_invoice(sales_invoice):
                     consolidated_sales_invoices.add(sales_invoice)
 
+        # 2. Cancel consolidated sales invoices
         for si in consolidated_sales_invoices:
             if frappe.db.exists("Sales Invoice", si):
                 si_doc = frappe.get_doc("Sales Invoice", si)
                 if si_doc.docstatus == 1:
                     si_doc.cancel()
+
+    def _unlink_pos_invoice(self, pos_invoice):
+        if frappe.db.has_column("POS Invoice", "pos_closing_entry"):
+            frappe.db.set_value("POS Invoice", pos_invoice, "pos_closing_entry", None)
+        if frappe.db.has_column("POS Invoice", "consolidated_invoice"):
+            frappe.db.set_value("POS Invoice", pos_invoice, "consolidated_invoice", None)
+
+    def _handle_merge_logs_for_pos_invoice(self, pos_invoice, consolidated_sales_invoices):
+        merge_logs = frappe.get_all(
+            "POS Invoice Merge Log",
+            filters={"pos_invoice": pos_invoice},
+            pluck="name",
+        )
+        for log in merge_logs:
+            log_doc = frappe.get_doc("POS Invoice Merge Log", log)
+            for field in (
+                "consolidated_invoice",
+                "consolidated_credit_note",
+            ):
+                si = log_doc.get(field)
+                if si:
+                    consolidated_sales_invoices.add(si)
+            if log_doc.docstatus == 1:
+                log_doc.cancel()
+            frappe.delete_doc("POS Invoice Merge Log", log_doc.name, force=1)
 
     def _is_consolidated_sales_invoice(self, sales_invoice):
         """Return True if the Sales Invoice was generated by consolidating POS Invoices."""
@@ -170,17 +166,14 @@ class POSClosingShift(Document):
     def delete_draft_invoices(self):
         if frappe.get_value("POS Profile", self.pos_profile, "posa_allow_delete"):
             doctype = "Sales Invoice"
-            data = frappe.db.sql(
-                f"""
-		select
-		    name
-		from
-		    `tab{doctype}`
-		where
-		    docstatus = 0 and posa_is_printed = 0 and posa_pos_opening_shift = %s
-		""",
-                (self.pos_opening_shift),
-                as_dict=1,
+            data = frappe.get_all(
+                doctype,
+                filters={
+                    "docstatus": 0,
+                    "posa_is_printed": 0,
+                    "posa_pos_opening_shift": self.pos_opening_shift
+                },
+                fields=["name"]
             )
 
             for invoice in data:
@@ -367,19 +360,16 @@ def get_pos_invoices(pos_opening_shift, doctype=None):
         use_pos_invoice = False
         doctype = "POS Invoice" if use_pos_invoice else "Sales Invoice"
     submit_printed_invoices(pos_opening_shift, doctype)
-    cond = " and ifnull(consolidated_invoice,'') = ''" if doctype == "POS Invoice" else ""
-    data = frappe.db.sql(
-        f"""
-	select
-		name
-	from
-		`tab{doctype}`
-	where
-		docstatus = 1 and posa_pos_opening_shift = %s{cond}
-	""",
-        (pos_opening_shift),
-        as_dict=1,
-    )
+
+    filters = {
+        "docstatus": 1,
+        "posa_pos_opening_shift": pos_opening_shift
+    }
+
+    if doctype == "POS Invoice":
+        filters["consolidated_invoice"] = ["is", "not set"]
+
+    data = frappe.get_all(doctype, filters=filters, fields=["name"])
 
     data = [frappe.get_doc(doctype, d.name).as_dict() for d in data]
 
@@ -410,7 +400,9 @@ def get_payments_entries(pos_opening_shift):
 
 @frappe.whitelist()
 def make_closing_shift_from_opening(opening_shift):
-    opening_shift = json.loads(opening_shift)
+    if isinstance(opening_shift, str):
+        opening_shift = json.loads(opening_shift)
+
     use_pos_invoice = False
     doctype = "POS Invoice" if use_pos_invoice else "Sales Invoice"
     submit_printed_invoices(opening_shift.get("name"), doctype)
@@ -568,7 +560,8 @@ def make_closing_shift_from_opening(opening_shift):
 
 @frappe.whitelist()
 def submit_closing_shift(closing_shift):
-    closing_shift = json.loads(closing_shift)
+    if isinstance(closing_shift, str):
+        closing_shift = json.loads(closing_shift)
     closing_shift_doc = frappe.get_doc(closing_shift)
     closing_shift_doc.flags.ignore_permissions = True
     closing_shift_doc.save()

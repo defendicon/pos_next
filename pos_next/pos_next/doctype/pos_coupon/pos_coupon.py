@@ -21,13 +21,18 @@ class POSCoupon(Document):
                 self.coupon_code = frappe.generate_hash()[:10].upper()
 
     def validate(self):
-        # Gift Card validations
+        self.validate_gift_card()
+        self.validate_discount_configuration()
+        self.validate_amount_rules()
+        self.validate_dates()
+
+    def validate_gift_card(self):
         if self.coupon_type == "Gift Card":
             self.maximum_use = 1
             if not self.customer:
                 frappe.throw(_("Please select the customer for Gift Card."))
 
-        # Discount validations
+    def validate_discount_configuration(self):
         if not self.discount_type:
             frappe.throw(_("Discount Type is required"))
 
@@ -42,30 +47,32 @@ class POSCoupon(Document):
             if flt(self.discount_amount) <= 0:
                 frappe.throw(_("Discount Amount must be greater than 0"))
 
-        # Minimum amount validation
+    def validate_amount_rules(self):
         if self.min_amount and flt(self.min_amount) < 0:
             frappe.throw(_("Minimum Amount cannot be negative"))
-
-        # Maximum discount validation
         if self.max_amount and flt(self.max_amount) <= 0:
             frappe.throw(_("Maximum Discount Amount must be greater than 0"))
 
-        # Date validations
+    def validate_dates(self):
         if self.valid_from and self.valid_upto:
             if getdate(self.valid_from) > getdate(self.valid_upto):
                 frappe.throw(_("Valid From date cannot be after Valid Until date"))
-
 
 
 def check_coupon_code(coupon_code, customer=None, company=None):
     """Validate and return coupon details"""
     res = {"coupon": None}
 
-    if not frappe.db.exists("POS Coupon", {"coupon_code": coupon_code.upper()}):
+    if not coupon_code:
+        res["msg"] = _("Coupon code is required")
+        return res
+
+    coupon_name = frappe.db.get_value("POS Coupon", {"coupon_code": coupon_code.upper()})
+    if not coupon_name:
         res["msg"] = _("Sorry, this coupon code does not exist")
         return res
 
-    coupon = frappe.get_doc("POS Coupon", {"coupon_code": coupon_code.upper()})
+    coupon = frappe.get_doc("POS Coupon", coupon_name)
 
     # Check if coupon is disabled
     if coupon.disabled:
@@ -73,15 +80,13 @@ def check_coupon_code(coupon_code, customer=None, company=None):
         return res
 
     # Check validity dates
-    if coupon.valid_from:
-        if coupon.valid_from > getdate(today()):
-            res["msg"] = _("Sorry, this coupon code's validity has not started")
-            return res
+    if coupon.valid_from and coupon.valid_from > getdate(today()):
+        res["msg"] = _("Sorry, this coupon code's validity has not started")
+        return res
 
-    if coupon.valid_upto:
-        if coupon.valid_upto < getdate(today()):
-            res["msg"] = _("Sorry, this coupon code has expired")
-            return res
+    if coupon.valid_upto and coupon.valid_upto < getdate(today()):
+        res["msg"] = _("Sorry, this coupon code has expired")
+        return res
 
     # Check usage limits
     if coupon.used and coupon.maximum_use and coupon.used >= coupon.maximum_use:
@@ -160,10 +165,17 @@ def apply_coupon_discount(coupon, cart_total, net_total=None):
 def increment_coupon_usage(coupon_code):
     """Increment the usage counter for a coupon"""
     try:
-        coupon = frappe.get_doc("POS Coupon", {"coupon_code": coupon_code.upper()})
-        coupon.used = (coupon.used or 0) + 1
-        coupon.db_set('used', coupon.used)
-        frappe.db.commit()
+        if not coupon_code:
+            return
+
+        coupon_name = frappe.db.get_value("POS Coupon", {"coupon_code": coupon_code.upper()})
+        if coupon_name:
+            # Atomic update
+            frappe.db.sql("""
+                UPDATE `tabPOS Coupon`
+                SET used = COALESCE(used, 0) + 1
+                WHERE name = %s
+            """, (coupon_name,))
     except Exception as e:
         frappe.log_error(
             title="Coupon Usage Increment Failed",
@@ -174,11 +186,17 @@ def increment_coupon_usage(coupon_code):
 def decrement_coupon_usage(coupon_code):
     """Decrement the usage counter for a coupon (for cancelled invoices)"""
     try:
-        coupon = frappe.get_doc("POS Coupon", {"coupon_code": coupon_code.upper()})
-        if coupon.used and coupon.used > 0:
-            coupon.used = coupon.used - 1
-            coupon.db_set('used', coupon.used)
-            frappe.db.commit()
+        if not coupon_code:
+            return
+
+        coupon_name = frappe.db.get_value("POS Coupon", {"coupon_code": coupon_code.upper()})
+        if coupon_name:
+            # Atomic update, prevent negative
+            frappe.db.sql("""
+                UPDATE `tabPOS Coupon`
+                SET used = GREATEST(COALESCE(used, 0) - 1, 0)
+                WHERE name = %s
+            """, (coupon_name,))
     except Exception as e:
         frappe.log_error(
             title="Coupon Usage Decrement Failed",

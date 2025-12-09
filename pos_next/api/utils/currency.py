@@ -2,6 +2,9 @@
 import frappe
 from frappe.utils import flt
 
+# Copyright (c) 2025, BrainWise and contributors
+# For license information, please see license.txt
+
 def get_base_value(doc, fieldname, base_fieldname=None, conversion_rate=None):
     """Return the value for a field in company currency."""
 

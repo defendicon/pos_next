@@ -1,4 +1,4 @@
-# Copyright (c) 2018, Frappe Technologies Pvt. Ltd. and contributors
+# Copyright (c) 2025, BrainWise and contributors
 # For license information, please see license.txt
 
 import frappe
@@ -19,10 +19,21 @@ def get_customer_balance(customer, company=None):
     if not company:
         company = frappe.defaults.get_user_default("Company")
 
+    total_outstanding = _get_customer_outstanding(customer, company)
+    total_credit = _get_customer_credits(customer, company)
+    advance_balance = _get_customer_advances(customer, company)
+
+    # Calculate net balance (what the customer actually owes)
+    # Net Balance = Outstanding - (Returns + Advances)
+    net_balance = total_outstanding - (total_credit + advance_balance)
+
     return {
-        "outstanding_amount": _get_customer_outstanding(customer, company),
-        "credit_balance": _get_customer_credits(customer, company),
-        "advance_balance": _get_customer_advances(customer, company)
+        "total_outstanding": total_outstanding, # Restored original key
+        "outstanding_amount": total_outstanding, # New alias
+        "total_credit": total_credit, # Restored original key
+        "credit_balance": total_credit, # New alias
+        "advance_balance": advance_balance,
+        "net_balance": net_balance # Restored original key
     }
 
 def _get_customer_outstanding(customer, company):
@@ -98,16 +109,24 @@ def get_available_credit(customer, company, pos_profile=None):
     """
     Get available credit details to be used for payment.
     Returns a list of credit sources (Return Invoices and Unallocated Advances).
+    Ensures backward compatibility with frontend expecting specific keys.
     """
+    # Restored check for credit sale setting
+    if pos_profile and not check_credit_sale_enabled(pos_profile):
+        return []
+
     credits = []
 
     # 1. Get Credit Notes (Negative Outstanding)
     negative_invoices = _get_negative_invoices(customer, company)
     for inv in negative_invoices:
         credits.append({
-            "name": inv.name,
+            "type": "Invoice", # Backward compat
             "doctype": "Sales Invoice",
+            "name": inv.name,
+            "credit_origin": inv.name, # Backward compat
             "amount": abs(flt(inv.outstanding_amount)),
+            "total_credit": abs(flt(inv.outstanding_amount)), # Backward compat
             "posting_date": inv.posting_date,
             "reference_name": inv.name
         })
@@ -116,9 +135,12 @@ def get_available_credit(customer, company, pos_profile=None):
     unallocated_advances = _get_unallocated_advances(customer, company)
     for adv in unallocated_advances:
         credits.append({
-            "name": adv.name,
+            "type": "Payment Entry", # Backward compat
             "doctype": "Payment Entry",
+            "name": adv.name,
+            "credit_origin": adv.name, # Backward compat
             "amount": flt(adv.unallocated_amount),
+            "total_credit": flt(adv.unallocated_amount), # Backward compat
             "posting_date": adv.posting_date,
             "reference_name": adv.name
         })
@@ -161,8 +183,6 @@ def redeem_customer_credit(invoice_name, credit_data):
     Args:
         invoice_name: Name of the Sales Invoice to pay
         credit_data: List of dicts or JSON string of credits to use.
-            Format: [{"doctype": "Sales Invoice", "name": "INV-RET-001", "amount": 50}, ...]
-            OR older format dict: {"sales_invoices": [...], "payment_entries": [...]}
     """
     import json
     if isinstance(credit_data, str):
@@ -180,10 +200,27 @@ def redeem_customer_credit(invoice_name, credit_data):
         payment_entries = credit_data.get("payment_entries", [])
     elif isinstance(credit_data, list):
         for credit in credit_data:
-            if credit.get("doctype") == "Sales Invoice":
-                sales_invoices.append(credit)
-            elif credit.get("doctype") == "Payment Entry":
-                payment_entries.append(credit)
+            # Handle frontend sending "credit_origin" instead of "name"
+            credit_name = credit.get("name") or credit.get("credit_origin")
+            credit_doctype = credit.get("doctype") or credit.get("type")
+
+            # Map legacy types
+            if credit_doctype == "Invoice":
+                credit_doctype = "Sales Invoice"
+
+            if credit_doctype == "Sales Invoice":
+                # Ensure we have the name
+                if credit_name:
+                    sales_invoices.append({
+                        "name": credit_name,
+                        "amount": credit.get("amount")
+                    })
+            elif credit_doctype == "Payment Entry":
+                if credit_name:
+                    payment_entries.append({
+                        "name": credit_name,
+                        "amount": credit.get("amount")
+                    })
 
     # 1. Apply Credit Notes (Return Invoices) -> Create Journal Entry
     for credit_inv in sales_invoices:
@@ -260,6 +297,39 @@ def _reconcile_payment_entry(invoice_doc, payment_entry_name, amount):
     pe.save()
     pe.submit()
     return pe.name
+
+
+def cancel_credit_journal_entries(invoice_name):
+    """
+    Cancel any credit journal entries linked to a Sales Invoice when it is cancelled.
+    Restored logic to prevent accounting discrepancies.
+    """
+    # Find Journal Entries where this invoice is referenced in credit side (payment application)
+    # The Journal Entry would have been created by _create_credit_allocation_journal_entry
+    # It links to the invoice in "reference_name" of one of the rows.
+
+    # We look for submitted Journal Entries
+    jes = frappe.db.sql("""
+        SELECT parent
+        FROM `tabJournal Entry Account`
+        WHERE reference_type = "Sales Invoice"
+        AND reference_name = %s
+        AND docstatus = 1
+    """, (invoice_name,), as_dict=1)
+
+    cancelled_count = 0
+    for row in jes:
+        je_name = row.parent
+        # Verify if this is indeed a credit allocation JE (optional check)
+        if frappe.db.get_value("Journal Entry", je_name, "voucher_type") == "Credit Note":
+            try:
+                je = frappe.get_doc("Journal Entry", je_name)
+                je.cancel()
+                cancelled_count += 1
+            except Exception as e:
+                frappe.log_error(f"Failed to cancel credit JE {je_name} for invoice {invoice_name}: {str(e)}")
+
+    return cancelled_count
 
 
 @frappe.whitelist()

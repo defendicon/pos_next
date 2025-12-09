@@ -38,7 +38,9 @@ def _build_branding_payload(doc):
         "_sig": doc.encrypted_signature,
         "_ts": frappe.utils.now(),
         "_v": doc.enable_server_validation,
-        "_e": doc.enabled  # Return actual state (1 or 0)
+        "_e": doc.enabled,  # Return actual state (1 or 0)
+        "_c": "pos-footer-component", # Legacy component name
+        "_s": {"p": "12px 20px"} # Legacy styling
     }
 
 def get_default_config():

@@ -26,6 +26,7 @@ ITEM_RESULT_FIELDS = [
 	"has_variants",
 	"custom_company",
 	"disabled",
+	"allow_negative_stock",
 ]
 
 ITEM_RESULT_COLUMNS = ",\n\t".join(ITEM_RESULT_FIELDS)
@@ -276,10 +277,13 @@ def get_item_detail(item, doc=None, warehouse=None, price_list=None, company=Non
 	res["batch_no_data"] = batch_no_data
 	res["serial_no_data"] = serial_no_data
 
-	# Add item_group and brand for offer eligibility checking
-	item_group, brand = frappe.db.get_value("Item", item_code, ["item_group", "brand"])
-	res["item_group"] = item_group
-	res["brand"] = brand
+	# Add item_group, brand and allow_negative_stock
+	item_values = frappe.db.get_value(
+		"Item", item_code, ["item_group", "brand", "allow_negative_stock"], as_dict=1
+	)
+	res["item_group"] = item_values.item_group
+	res["brand"] = item_values.brand
+	res["allow_negative_stock"] = item_values.allow_negative_stock
 
 	# Add UOMs data
 	uoms = frappe.get_all(
@@ -493,6 +497,7 @@ def get_item_variants(template_item, pos_profile):
 				"item_group",
 				"brand",
 				"custom_company",
+				"allow_negative_stock",
 			],
 		)
 
@@ -1033,6 +1038,7 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 					"has_variants",
 					"custom_company",
 					"disabled",
+					"allow_negative_stock",
 				],
 				start=start,
 				page_length=limit,

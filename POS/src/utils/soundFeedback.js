@@ -50,18 +50,19 @@ export function playErrorSound() {
 			audioContext.resume().catch(() => {});
 		}
 
+		// Use a triangle wave for a softer but still alerting sound
 		const oscillator = audioContext.createOscillator();
 		const gainNode = audioContext.createGain();
 
-		oscillator.type = 'sawtooth'; // Harsher sound for error
-		oscillator.frequency.setValueAtTime(150, audioContext.currentTime);
+		oscillator.type = 'triangle';
+		// Start slightly higher but drop quickly - classic UI error "bonk"
+		oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
+		oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.2);
 
-		// Descending pitch
-		oscillator.frequency.linearRampToValueAtTime(100, audioContext.currentTime + 0.3);
-
+		// Envelope
 		gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-		gainNode.gain.linearRampToValueAtTime(0.1, audioContext.currentTime + 0.05);
-		gainNode.gain.linearRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
+		gainNode.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.02);
+		gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
 
 		oscillator.connect(gainNode);
 		gainNode.connect(audioContext.destination);

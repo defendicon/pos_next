@@ -138,8 +138,16 @@ def _collect_stock_errors(items):
     return errors
 
 
-def _should_block(pos_profile):
+def _should_block(pos_profile, item_code=None):
     """Check if sale should be blocked for insufficient stock."""
+    # If item-specific override allows negative stock, do not block
+    if item_code:
+        item_allow_negative = cint(
+            frappe.db.get_value("Item", item_code, "allow_negative_stock") or 0
+        )
+        if item_allow_negative:
+            return False
+
     # First check global ERPNext Stock Settings
     allow_negative = cint(
         frappe.db.get_single_value("Stock Settings", "allow_negative_stock") or 0
@@ -190,9 +198,16 @@ def _validate_stock_on_invoice(invoice_doc):
     # Check for stock errors
     errors = _collect_stock_errors(items_to_check)
 
+    # Filter out errors for items that allow negative stock or where blocking is disabled
+    final_errors = []
+    if errors:
+        for error in errors:
+            if _should_block(invoice_doc.pos_profile, error.get("item_code")):
+                final_errors.append(error)
+
     # Throw error if stock insufficient and blocking is enabled
-    if errors and _should_block(invoice_doc.pos_profile):
-        frappe.throw(frappe.as_json({"errors": errors}), frappe.ValidationError)
+    if final_errors:
+        frappe.throw(frappe.as_json({"errors": final_errors}), frappe.ValidationError)
 
 
 def _auto_set_return_batches(invoice_doc):
@@ -245,14 +260,16 @@ def validate_cart_items(items, pos_profile=None):
     if pos_profile and not frappe.db.exists("POS Profile", pos_profile):
         pos_profile = None
 
-    if not _should_block(pos_profile):
-        return []
-
     errors = _collect_stock_errors(items)
-    if not errors:
-        return []
 
-    return errors
+    # Filter errors based on blocking logic per item
+    final_errors = []
+    if errors:
+        for error in errors:
+            if _should_block(pos_profile, error.get("item_code")):
+                final_errors.append(error)
+
+    return final_errors
 
 
 @frappe.whitelist()

@@ -75,7 +75,10 @@ export const usePOSCartStore = defineStore("posCart", () => {
 		const hasActualQty = item.actual_qty !== undefined || item.stock_qty !== undefined
 		const shouldValidateStock = !isNonStockItem && (item.is_stock_item || item.is_bundle || hasActualQty)
 
-		if (currentProfile && !autoAdd && settingsStore.shouldEnforceStockValidation() && shouldValidateStock && !item.has_serial_no && !item.has_batch_no) {
+		// Check if item specifically allows negative stock (overrides global setting)
+		const itemAllowsNegativeStock = Boolean(item.allow_negative_stock)
+
+		if (currentProfile && !autoAdd && settingsStore.shouldEnforceStockValidation() && !itemAllowsNegativeStock && shouldValidateStock && !item.has_serial_no && !item.has_batch_no) {
 			const warehouse = item.warehouse || currentProfile.warehouse
 			const actualQty =
 				item.actual_qty !== undefined ? item.actual_qty : item.stock_qty || 0

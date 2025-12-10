@@ -63,6 +63,19 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 	// Real-time POS Profile update handler
 	let posProfileUpdateCleanup = null
 
+	/**
+	 * Checks if cached items are stale (missing critical fields)
+	 * specifically checking for 'allow_negative_stock' which was added recently
+	 * @param {Array} items - Cached items to check
+	 * @returns {boolean} True if items are stale
+	 */
+	function isCacheStale(items) {
+		if (!items || items.length === 0) return false
+		// Check first few items
+		const sample = items.slice(0, 5)
+		return sample.some(item => item.allow_negative_stock === undefined)
+	}
+
 	// ========================================================================
 	// SMART CACHE UPDATE HELPERS
 	// ========================================================================
@@ -690,13 +703,19 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 					const cached = await offlineWorker.searchCachedItems("", limit)
 
 					if (cached && cached.length > 0) {
-						replaceAllItems(cached)
-						totalItemsLoaded.value = cached.length
-						currentOffset.value = cached.length
-						hasMore.value = hasFilters ? false : cached.length >= itemsPerPage.value
-						loading.value = false
-						log.success(`Loaded ${cached.length} items from cache`)
-						return // Exit early - cache hit, no server fetch needed
+						// Check for stale cache (missing new fields)
+						if (isCacheStale(cached)) {
+							log.warn("Cache is stale (missing allow_negative_stock), forcing server fetch")
+							// Fall through to server fetch
+						} else {
+							replaceAllItems(cached)
+							totalItemsLoaded.value = cached.length
+							currentOffset.value = cached.length
+							hasMore.value = hasFilters ? false : cached.length >= itemsPerPage.value
+							loading.value = false
+							log.success(`Loaded ${cached.length} items from cache`)
+							return // Exit early - cache hit, no server fetch needed
+						}
 					}
 				} catch (cacheError) {
 					log.warn("Cache load failed, will fetch from server", cacheError)
@@ -1144,13 +1163,19 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 					const cached = await offlineWorker.searchCachedItems(term, searchLimit)
 
 					if (cached && cached.length > 0) {
-						// Show cached results immediately (instant!)
-						setSearchResults(cached)
-						searching.value = false
-						log.success(`Found ${cached.length} items in cache`)
+						// Check for stale cache (missing new fields)
+						if (isCacheStale(cached)) {
+							log.warn("Cached search results are stale (missing allow_negative_stock), waiting for server")
+							// Don't show stale results, wait for server
+						} else {
+							// Show cached results immediately (instant!)
+							setSearchResults(cached)
+							searching.value = false
+							log.success(`Found ${cached.length} items in cache`)
 
-						// Resolve with cached results
-						resolve(cached)
+							// Resolve with cached results
+							resolve(cached)
+						}
 					}
 
 					// Now search server in background for fresh results

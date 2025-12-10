@@ -9,6 +9,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     ActionButton: typeof import('./src/components/common/ActionButton.vue')['default']
+    AuthDialog: typeof import('./src/components/common/AuthDialog.vue')['default']
     AutocompleteSelect: typeof import('./src/components/common/AutocompleteSelect.vue')['default']
     BatchSerialDialog: typeof import('./src/components/sale/BatchSerialDialog.vue')['default']
     CheckboxField: typeof import('./src/components/settings/CheckboxField.vue')['default']

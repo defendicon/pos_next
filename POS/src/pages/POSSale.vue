@@ -430,6 +430,12 @@
 			@warehouse-changed="handleWarehouseChanged"
 		/>
 
+		<!-- Auth Dialog -->
+		<AuthDialog
+			v-model="showAuthDialog"
+			@success="showPOSSettings = true"
+		/>
+
 		<!-- Stock Lookup Dialog (Products Menu) -->
 		<WarehouseAvailabilityDialog
 			v-model="showStockLookup"
@@ -697,6 +703,7 @@ import PromotionManagement from "@/components/sale/PromotionManagement.vue"
 import ReturnInvoiceDialog from "@/components/sale/ReturnInvoiceDialog.vue"
 import WarehouseAvailabilityDialog from "@/components/sale/WarehouseAvailabilityDialog.vue"
 import POSSettings from "@/components/settings/POSSettings.vue"
+import AuthDialog from "@/components/common/AuthDialog.vue"
 import InvoiceManagement from "@/components/invoices/InvoiceManagement.vue"
 import InvoiceDetailDialog from "@/components/invoices/InvoiceDetailDialog.vue"
 import { useRealtimeStock } from "@/composables/useRealtimeStock"
@@ -784,6 +791,7 @@ const showPromotionManagement = ref(false)
 
 // Settings dialog
 const showPOSSettings = ref(false)
+const showAuthDialog = ref(false)
 
 // Stock Lookup dialog (Products menu)
 const showStockLookup = ref(false)
@@ -2108,7 +2116,7 @@ function handleManagementMenuClick(menuItem) {
 	if (menuItem === "promotions") {
 		showPromotionManagement.value = true
 	} else if (menuItem === "settings") {
-		showPOSSettings.value = true
+		showAuthDialog.value = true
 	} else if (menuItem === "invoices") {
 		// Load invoice history data before showing
 		loadInvoiceHistoryData()

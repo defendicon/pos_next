@@ -17,3 +17,4 @@ from . import utilities
 def ping():
     """Simple ping endpoint for connectivity checks"""
     return "pong"
+from . import auth

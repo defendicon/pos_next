@@ -710,7 +710,7 @@ import { useRealtimeStock } from "@/composables/useRealtimeStock"
 import { usePOSEvents } from "@/composables/usePOSEvents"
 import { useLocale } from "@/composables/useLocale"
 import { session } from "@/data/session"
-import { useUserData } from "@/data/user"
+import { useUserData, userResource } from "@/data/user"
 import { parseError } from "@/utils/errorHandler"
 import { offlineWorker } from "@/utils/offline/workerClient"
 import { printInvoice, printInvoiceByName } from "@/utils/printInvoice"
@@ -2117,13 +2117,18 @@ function handleManagementMenuClick(menuItem) {
 		showPromotionManagement.value = true
 	} else if (menuItem === "settings") {
 		// Check if current user is allowed to access settings directly
+		// 1. Check if Admin or System User
+		// 2. Check if in allowed_users list
+
+		const currentUser = session.user
+		const userRoles = userResource.data?.roles?.map(r => r.role) || []
+		const isAdmin = currentUser === 'Administrator' || userRoles.includes('System Manager') || userRoles.includes('System User')
+
 		const allowedUsers = posSettingsStore.settings.allowed_users
 			? posSettingsStore.settings.allowed_users.split(',').map(u => u.trim())
 			: []
 
-		const currentUser = session.user
-
-		if (allowedUsers.includes(currentUser)) {
+		if (isAdmin || allowedUsers.includes(currentUser)) {
 			showPOSSettings.value = true
 		} else {
 			showAuthDialog.value = true

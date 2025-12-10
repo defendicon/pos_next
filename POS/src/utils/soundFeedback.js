@@ -50,25 +50,29 @@ export function playErrorSound() {
 			audioContext.resume().catch(() => {});
 		}
 
-		// Use a triangle wave for a softer but still alerting sound
+		const now = audioContext.currentTime;
 		const oscillator = audioContext.createOscillator();
 		const gainNode = audioContext.createGain();
 
-		oscillator.type = 'triangle';
-		// Start slightly higher but drop quickly - classic UI error "bonk"
-		oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
-		oscillator.frequency.exponentialRampToValueAtTime(100, audioContext.currentTime + 0.2);
+		// Use sine wave for a smoother, less abrasive sound
+		oscillator.type = 'sine';
 
-		// Envelope
-		gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-		gainNode.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.02);
-		gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.3);
+		// Play a low "dun-dun" sound
+		oscillator.frequency.setValueAtTime(200, now);
+		oscillator.frequency.setValueAtTime(150, now + 0.15); // Drop pitch for second note
+
+		// Envelope: Pulse twice
+		gainNode.gain.setValueAtTime(0, now);
+		gainNode.gain.linearRampToValueAtTime(0.2, now + 0.05);
+		gainNode.gain.linearRampToValueAtTime(0.05, now + 0.1); // Dip volume
+		gainNode.gain.linearRampToValueAtTime(0.2, now + 0.2);  // Rise again
+		gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
 
 		oscillator.connect(gainNode);
 		gainNode.connect(audioContext.destination);
 
 		oscillator.start();
-		oscillator.stop(audioContext.currentTime + 0.35);
+		oscillator.stop(now + 0.45);
 	} catch (e) {
 		console.error("Failed to play error sound", e);
 	}

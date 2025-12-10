@@ -1095,9 +1095,7 @@ function handleItemClick(itemCode) {
 	// - Item templates (has_variants) - variants have their own stock, template shouldn't be checked
 	// Check stock for stock items AND Product Bundles (bundles now have calculated stock)
 	const qty = Math.floor((item.actual_qty ?? item.stock_qty ?? 0))
-	const itemAllowsNegativeStock = Boolean(item.allow_negative_stock)
-
-	if ((item.is_stock_item || item.is_bundle) && !itemAllowsNegativeStock && !item.has_variants && !item.has_serial_no && !item.has_batch_no && qty <= 0 && settingsStore.shouldEnforceStockValidation()) {
+	if ((item.is_stock_item || item.is_bundle) && !item.has_variants && !item.has_serial_no && !item.has_batch_no && qty <= 0 && settingsStore.shouldEnforceStockValidation()) {
 		showError(item.is_bundle 
 			? __('"{0}" cannot be added to cart. Bundle is out of stock. Allow Negative Stock is disabled.', [item.item_name])
 			: __('"{0}" cannot be added to cart. Item is out of stock. Allow Negative Stock is disabled.', [item.item_name]))

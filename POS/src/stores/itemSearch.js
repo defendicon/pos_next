@@ -689,7 +689,10 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 					const limit = hasFilters ? 10000 : itemsPerPage.value
 					const cached = await offlineWorker.searchCachedItems("", limit)
 
-					if (cached && cached.length > 0) {
+					// Check for staleness: ensure critical fields like 'allow_negative_stock' exist
+					const isCacheStale = cached && cached.length > 0 && !('allow_negative_stock' in cached[0])
+
+					if (cached && cached.length > 0 && !isCacheStale) {
 						replaceAllItems(cached)
 						totalItemsLoaded.value = cached.length
 						currentOffset.value = cached.length
@@ -697,6 +700,9 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 						loading.value = false
 						log.success(`Loaded ${cached.length} items from cache`)
 						return // Exit early - cache hit, no server fetch needed
+					} else if (isCacheStale) {
+						log.warn("Cache stale (missing fields), fetching from server")
+						// Fall through to server fetch
 					}
 				} catch (cacheError) {
 					log.warn("Cache load failed, will fetch from server", cacheError)
@@ -1143,7 +1149,10 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 					log.debug(`Searching cache for: "${term}"`)
 					const cached = await offlineWorker.searchCachedItems(term, searchLimit)
 
-					if (cached && cached.length > 0) {
+					// Check for staleness: ensure critical fields like 'allow_negative_stock' exist
+					const isCacheStale = cached && cached.length > 0 && !('allow_negative_stock' in cached[0])
+
+					if (cached && cached.length > 0 && !isCacheStale) {
 						// Show cached results immediately (instant!)
 						setSearchResults(cached)
 						searching.value = false
@@ -1151,6 +1160,8 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 
 						// Resolve with cached results
 						resolve(cached)
+					} else if (isCacheStale) {
+						log.warn("Cache stale (missing fields), waiting for server search")
 					}
 
 					// Now search server in background for fresh results

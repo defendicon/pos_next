@@ -56,7 +56,9 @@
   "allow_change_posting_date",
   "section_break_misc",
   "input_qty",
-  "allow_negative_stock"
+  "allow_negative_stock",
+  "section_break_security",
+  "allowed_users"
  ],
  "fields": [
   {
@@ -413,6 +415,18 @@
    "fieldtype": "Check",
    "label": "Allow Negative Stock",
    "description": "Enable selling items even when stock reaches zero or below. Integrates with ERPNext negative stock settings."
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_security",
+   "fieldtype": "Section Break",
+   "label": "Security"
+  },
+  {
+   "fieldname": "allowed_users",
+   "fieldtype": "Small Text",
+   "label": "Allowed Users",
+   "description": "Comma-separated list of users allowed to access settings without re-authentication"
   }
  ],
  "index_web_pages_for_search": 1,

@@ -2116,7 +2116,18 @@ function handleManagementMenuClick(menuItem) {
 	if (menuItem === "promotions") {
 		showPromotionManagement.value = true
 	} else if (menuItem === "settings") {
-		showAuthDialog.value = true
+		// Check if current user is allowed to access settings directly
+		const allowedUsers = posSettingsStore.settings.allowed_users
+			? posSettingsStore.settings.allowed_users.split(',').map(u => u.trim())
+			: []
+
+		const currentUser = session.user
+
+		if (allowedUsers.includes(currentUser)) {
+			showPOSSettings.value = true
+		} else {
+			showAuthDialog.value = true
+		}
 	} else if (menuItem === "invoices") {
 		// Load invoice history data before showing
 		loadInvoiceHistoryData()

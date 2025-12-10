@@ -72,6 +72,7 @@
 import { ref, watch, computed } from 'vue'
 import { Dialog, Button } from 'frappe-ui'
 import { call } from '@/utils/apiWrapper'
+import { __ } from '@/utils/translation'
 
 const props = defineProps({
 	modelValue: Boolean

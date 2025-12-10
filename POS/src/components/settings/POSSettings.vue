@@ -90,6 +90,12 @@
 								>
 									{{ __('Sales Management') }}
 								</button>
+								<button
+									@click="activeTab = 'security'"
+									:class="['px-4 py-2 text-sm font-medium rounded-md transition-all duration-200', activeTab === 'security' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200/50']"
+								>
+									{{ __('Security') }}
+								</button>
 							</div>
 
 							<!-- Stock Settings Section - Prominent -->
@@ -363,6 +369,66 @@
 								</div>
 							</div>
 
+							<!-- Security Section -->
+							<div v-if="activeTab === 'security'" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+								<div :class="securitySectionClasses.header">
+									<div class="flex items-center justify-between">
+										<div class="flex items-center gap-3">
+											<div :class="securitySectionClasses.iconContainer">
+												<svg :class="securitySectionClasses.icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+												</svg>
+											</div>
+											<div>
+												<h3 class="text-lg font-bold text-gray-900">{{ __('Security') }}</h3>
+												<p class="text-xs text-gray-600 mt-0.5">{{ __('Configure access controls') }}</p>
+											</div>
+										</div>
+									</div>
+								</div>
+								<div class="p-6 flex flex-col gap-6">
+									<div :class="accessSubsectionClasses.container">
+										<div class="flex items-center gap-2 mb-4">
+											<svg :class="accessSubsectionClasses.icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+											</svg>
+											<h4 class="text-sm font-semibold text-gray-900">{{ __('Settings Access') }}</h4>
+										</div>
+
+										<div class="flex flex-col gap-4">
+											<div>
+												<label class="block text-sm font-medium text-gray-700 mb-1">{{ __('Allow Users') }}</label>
+												<p class="text-xs text-gray-500 mb-3">{{ __('Selected users can access settings without re-authentication.') }}</p>
+
+												<AutocompleteSelect
+													:modelValue="null"
+													@update:modelValue="handleAddUser"
+													:options="userOptions"
+													:placeholder="__('Search and add user...')"
+													:loading="userSearchResource.loading"
+													@search="searchUsers"
+												/>
+											</div>
+
+											<!-- Selected Users List -->
+											<div v-if="allowedUsersList.length > 0" class="flex flex-wrap gap-2 mt-2 p-4 bg-gray-50 rounded-lg border border-gray-200">
+												<div v-for="user in allowedUsersList" :key="user" class="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-full text-sm text-gray-700 shadow-sm">
+													<span>{{ user }}</span>
+													<button @click="removeUser(user)" class="text-gray-400 hover:text-red-500 focus:outline-none">
+														<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+															<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+														</svg>
+													</button>
+												</div>
+											</div>
+											<div v-else class="text-sm text-gray-500 italic p-4 bg-gray-50 rounded-lg border border-gray-200 border-dashed text-center">
+												{{ __('No users added. Only Admins can access.') }}
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+
 						</div>
 
 						<!-- Empty State -->
@@ -385,6 +451,7 @@
 import CheckboxField from "@/components/settings/CheckboxField.vue"
 import NumberField from "@/components/settings/NumberField.vue"
 import SelectField from "@/components/settings/SelectField.vue"
+import AutocompleteSelect from "@/components/common/AutocompleteSelect.vue"
 import { useToast } from "@/composables/useToast"
 import { Button, call, createResource } from "frappe-ui"
 import { computed, onMounted, onUnmounted, ref, watch } from "vue"
@@ -434,7 +501,68 @@ const settings = ref({
 	silent_print: 0,
 	allow_negative_stock: 0,
 	tax_inclusive: 0,
+	allowed_users: "",
 })
+
+// Security Settings
+const userSearchQuery = ref("")
+const userOptions = ref([])
+const securitySectionClasses = computed(() => getSectionHeaderClasses("red"))
+const accessSubsectionClasses = computed(() => getSubsectionClasses("gray"))
+
+// Computed array of allowed users from comma-separated string
+const allowedUsersList = computed(() => {
+	if (!settings.value.allowed_users) return []
+	return settings.value.allowed_users.split(',').filter(u => u.trim())
+})
+
+// Search users
+const userSearchResource = createResource({
+	url: "frappe.desk.search.search_link",
+	makeParams(query) {
+		return {
+			txt: query,
+			doctype: "User",
+			ignore_user_permissions: 1,
+			filters: {
+				enabled: 1
+			}
+		}
+	},
+	onSuccess(data) {
+		userOptions.value = (data || []).map(u => ({
+			label: u.description || u.value, // Usually search_link returns {value, description}
+			value: u.value,
+			subtitle: u.value
+		}))
+	}
+})
+
+function searchUsers(query) {
+	userSearchQuery.value = query
+	if (query) {
+		userSearchResource.submit(query)
+	}
+}
+
+function handleAddUser(userEmail) {
+	if (!userEmail) return
+
+	const currentUsers = allowedUsersList.value
+	if (!currentUsers.includes(userEmail)) {
+		const newUsers = [...currentUsers, userEmail]
+		settings.value.allowed_users = newUsers.join(',')
+		showSuccess(__('User added to allow list'))
+	}
+	// Reset selection
+	userSearchQuery.value = ""
+}
+
+function removeUser(userEmail) {
+	const currentUsers = allowedUsersList.value
+	const newUsers = currentUsers.filter(u => u !== userEmail)
+	settings.value.allowed_users = newUsers.join(',')
+}
 
 // Stock Sync Settings (localStorage persisted)
 const stockSyncEnabled = ref(false)

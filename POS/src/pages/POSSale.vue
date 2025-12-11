@@ -2125,7 +2125,10 @@ function handleManagementMenuClick(menuItem) {
 		// Combine roles from userResource and frappe boot if available
 		const resourceRoles = userResource.data?.roles?.map(r => r.role) || []
 		const bootRoles = window.frappe?.boot?.user?.roles || []
-		const userRoles = [...new Set([...resourceRoles, ...bootRoles])]
+		// Also check user_roles global if available (legacy/common in some setups)
+		const globalRoles = window.frappe?.user_roles || []
+
+		const userRoles = [...new Set([...resourceRoles, ...bootRoles, ...globalRoles])]
 
 		// Check for Admin (case-insensitive for robustness)
 		const isAdministrator = typeof currentUser === 'string' && currentUser.toLowerCase() === 'administrator'
@@ -2133,13 +2136,16 @@ function handleManagementMenuClick(menuItem) {
 		const isAdmin = isAdministrator ||
 			userRoles.includes('System Manager') ||
 			userRoles.includes('System User') ||
-			userRoles.includes('Administrator') // Sometimes role name is Administrator
+			userRoles.includes('Administrator')
 
 		const allowedUsers = posSettingsStore.settings.allowed_users
 			? posSettingsStore.settings.allowed_users.split(',').map(u => u.trim())
 			: []
 
-		if (isAdmin || allowedUsers.includes(currentUser)) {
+		// Case-insensitive check for allowed users
+		const isAllowed = allowedUsers.some(u => u.toLowerCase() === (currentUser || '').toLowerCase())
+
+		if (isAdmin || isAllowed) {
 			showPOSSettings.value = true
 		} else {
 			showAuthDialog.value = true

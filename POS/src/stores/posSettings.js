@@ -336,7 +336,7 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 		isLoading.value = true
 
 		try {
-			await settingsResource.reload()
+			await settingsResource.submit({ pos_profile: settings.value.pos_profile })
 			return true
 		} catch (error) {
 			console.error("Error reloading POS Settings:", error)

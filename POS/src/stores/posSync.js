@@ -17,6 +17,7 @@
 import { useToast } from "@/composables/useToast"
 import {
 	cacheCustomersFromServer,
+	cacheItemsFromServer,
 	cachePaymentMethodsFromServer,
 	syncOfflineInvoices,
 } from "@/utils/offline"
@@ -270,18 +271,68 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 				// Continue with other data loading
 			}
 
-			// Load customers if cache needs refresh
+			// Load customers and items if cache needs refresh
 			if (!cacheReady || needsRefresh) {
-				showSuccess(__("Loading customers for offline use..."))
+				showSuccess(__("Loading data for offline use..."))
 
-				const customersData = await cacheCustomersFromServer(currentProfile.name)
-				await cacheData([], customersData.customers || [])
+				// Load customers
+				try {
+					const customersData = await cacheCustomersFromServer(currentProfile.name)
+					await cacheData([], customersData.customers || [])
+				} catch (e) {
+					log.error('Failed to cache customers', e)
+				}
+
+				// Load items
+				try {
+					const itemsData = await cacheItemsFromServer(currentProfile.name)
+					await cacheData(itemsData.items || [], [])
+				} catch (e) {
+					log.error('Failed to cache items', e)
+				}
 
 				showSuccess(__("Data is ready for offline use"))
 			}
 		} catch (error) {
 			log.error('Failed to preload offline data', error)
 			showWarning(__("Some data may not be available offline"))
+		}
+	}
+
+	/**
+	 * Manually trigger full data sync
+	 */
+	async function manualSync(currentProfile) {
+		if (isOffline.value) {
+			showWarning(__("Cannot sync while offline"))
+			return
+		}
+
+		isSyncing.value = true
+		try {
+			// Sync pending invoices first
+			await syncAllPending()
+
+			// Force refresh cache
+			if (currentProfile) {
+				showSuccess(__("Refreshing offline data..."))
+
+				// Clear existing cache to ensure freshness (optional, but cleaner)
+				// await offlineWorker.clearItemsCache()
+
+				const customersData = await cacheCustomersFromServer(currentProfile.name)
+				await cacheData([], customersData.customers || [])
+
+				const itemsData = await cacheItemsFromServer(currentProfile.name)
+				await cacheData(itemsData.items || [], [])
+
+				showSuccess(__("Offline data refreshed successfully"))
+			}
+		} catch (error) {
+			log.error('Manual sync failed', error)
+			showError(__("Sync failed: {0}", [error.message]))
+		} finally {
+			isSyncing.value = false
 		}
 	}
 
@@ -337,6 +388,7 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 		loadPendingInvoices,
 		deleteOfflineInvoice,
 		syncAllPending,
+		manualSync,
 		preloadDataForOffline,
 		checkOfflineCacheAvailability,
 		checkCacheReady,

@@ -256,6 +256,7 @@ const appVersion = version
 
 const emit = defineEmits([
 	"sync-click",
+	"sync-now",
 	"printer-click",
 	"refresh-click",
 	"menu-click",

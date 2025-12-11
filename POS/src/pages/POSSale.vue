@@ -22,6 +22,7 @@
 				:stock-sync-active="isStockSyncActive"
 				:is-refreshing="stockStore.refreshing"
 				@sync-click="handleSyncClick"
+				@sync-now="handleManualSync"
 				@printer-click="uiStore.showHistoryDialog = true"
 				@refresh-click="handleRefresh"
 				@clear-cache="handleClearCache"
@@ -1947,7 +1948,20 @@ async function handleSyncClick() {
 		return
 	}
 
-	showSuccess(__("No pending invoices to sync"))
+	handleManualSync()
+}
+
+async function handleManualSync() {
+	if (offlineStore.isOffline) {
+		showWarning(__("Cannot sync while offline"))
+		return
+	}
+
+	if (shiftStore.currentProfile) {
+		await offlineStore.manualSync(shiftStore.currentProfile)
+		// Refresh UI
+		await itemsSelectorRef.value?.loadItems()
+	}
 }
 
 async function handleSyncAll() {

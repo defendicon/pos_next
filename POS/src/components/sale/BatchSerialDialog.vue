@@ -205,6 +205,7 @@
 import { Button, Dialog, createResource } from "frappe-ui"
 import { computed, ref, watch } from "vue"
 import { useSerialNumberStore } from "@/stores/serialNumber"
+import { isOffline } from "@/utils/offline"
 
 const props = defineProps({
 	modelValue: Boolean,
@@ -305,7 +306,14 @@ const isLoadingSerials = computed(() => serialStore.loading)
 
 async function loadBatchesOrSerials() {
 	if (props.item?.has_batch_no) {
-		batchesResource.reload()
+		if (isOffline()) {
+			// In offline mode, use cached data or allow manual entry if needed
+			// For now, assume we can't load batches offline effectively without caching them explicitly
+			// Fallback: Check if item has cached batches (if we implemented batch caching)
+			availableBatches.value = []
+		} else {
+			batchesResource.reload()
+		}
 	} else if (props.item?.has_serial_no) {
 		// Set warehouse in store
 		serialStore.setWarehouse(props.warehouse)

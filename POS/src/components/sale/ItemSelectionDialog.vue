@@ -238,6 +238,7 @@ import { Button, Dialog } from "frappe-ui"
 import { createResource } from "frappe-ui"
 import { computed, ref, watch } from "vue"
 import TranslatedHTML from "../common/TranslatedHTML.vue"
+import { isOffline } from "@/utils/offline"
 
 const props = defineProps({
 	modelValue: Boolean,
@@ -417,9 +418,17 @@ function loadOptions() {
 	selectedAttributes.value = {} // Reset attribute selection
 
 	if (props.mode === "variant") {
-		// Load variants from API
-		loading.value = true
-		variantsResource.reload()
+		if (isOffline()) {
+			// Offline: Variants cannot be dynamically fetched from server
+			// If variants are not pre-cached, show warning
+			loading.value = false
+			options.value = []
+			// Note: We could implement offline variant searching if needed
+		} else {
+			// Load variants from API
+			loading.value = true
+			variantsResource.reload()
+		}
 	} else {
 		// Load UOM options and auto-select first one
 		options.value = buildUomOptions()

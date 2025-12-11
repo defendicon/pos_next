@@ -209,34 +209,42 @@ export const useCustomerSearchStore = defineStore("customerSearch", () => {
 
 		loading.value = true
 		try {
-                        // Try to get from worker cache first
-                        const cachedCustomers = await offlineWorker.searchCachedCustomers(
-                                "",
-                                0,
-                        )
+			// Try to get from worker cache first
+			const cachedCustomers = await offlineWorker.searchCachedCustomers(
+				"",
+				0,
+			)
 
 			if (cachedCustomers && cachedCustomers.length > 0) {
 				allCustomers.value = cachedCustomers
 				console.log(
 					`✓ Loaded ${cachedCustomers.length} customers from cache`,
 				)
-			} else if (!isOffline()) {
-				// Fetch from server if cache is empty and online
-                                const response = await call("pos_next.api.customers.get_customers", {
-                                        pos_profile: posProfile,
-                                        search_term: "",
-                                        start: 0,
-                                        limit: 0,
-                                })
-				const list = response?.message || response || []
-				allCustomers.value = list
+			}
 
-				// Cache for future use
-				if (list.length) {
-					await offlineWorker.cacheCustomers(list)
+			// If online, always try to fetch fresh data to ensure completeness
+			if (!isOffline()) {
+				try {
+					const response = await call("pos_next.api.customers.get_customers", {
+						pos_profile: posProfile,
+						search_term: "",
+						start: 0,
+						limit: 0,
+					})
+					const list = response?.message || response || []
+
+					// Update local state with fresh data
+					if (list.length > 0) {
+						allCustomers.value = list
+						// Cache for future use
+						await offlineWorker.cacheCustomers(list)
+						console.log(`✓ Synced ${list.length} customers from server`)
+					}
+				} catch (serverError) {
+					console.error("Error syncing customers from server:", serverError)
+					// If server fail, we still have cache (if loaded)
 				}
-				console.log(`✓ Loaded ${list.length} customers from server`)
-			} else {
+			} else if (!cachedCustomers || cachedCustomers.length === 0) {
 				// Offline and cache is empty - show warning
 				console.warn("⚠️ Offline mode: No cached customers available. Please sync data when online.")
 				allCustomers.value = []

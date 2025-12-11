@@ -142,6 +142,7 @@
 import { useToast } from "@/composables/useToast"
 import { formatCurrency as formatCurrencyUtil } from "@/utils/currency"
 import { getInvoiceStatusColor } from "@/utils/invoice"
+import { isOffline } from "@/utils/offline"
 import { Button, Dialog, Input, createResource } from "frappe-ui"
 import { computed, ref, watch } from "vue"
 
@@ -238,6 +239,13 @@ const filteredInvoices = computed(() => {
 })
 
 function loadInvoices() {
+	if (isOffline()) {
+		// Offline mode: Show warning or cached invoices if implemented
+		// For now, clear list to avoid confusion
+		invoices.value = []
+		return
+	}
+
 	if (props.posProfile) {
 		invoicesResource.reload()
 	}

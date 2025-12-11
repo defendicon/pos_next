@@ -23,6 +23,7 @@ import {
 	onCSRFTokenRefresh,
 } from "./utils/csrf"
 import { logger } from "./utils/logger"
+import { initMemoryCache, isCacheReady } from "./utils/offline/cache"
 import { offlineWorker } from "./utils/offline/workerClient"
 import translationPlugin from "./utils/translation"
 
@@ -192,6 +193,18 @@ async function initializeApp() {
 	log.debug("Registering router, auth state:", session.isLoggedIn)
 	app.use(router)
 	app.mount("#app")
+
+	// -------------------------------------------------------------------------
+	// Initialize Offline Cache
+	// -------------------------------------------------------------------------
+	try {
+		await initMemoryCache()
+		if (!isCacheReady() && navigator.onLine) {
+			log.info("Cache not ready, will sync on profile load")
+		}
+	} catch (error) {
+		log.error("Failed to initialize memory cache", error)
+	}
 
 	// -------------------------------------------------------------------------
 	// Scheduled CSRF Token Refresh (every 30 minutes)

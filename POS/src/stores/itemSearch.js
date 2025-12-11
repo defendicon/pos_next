@@ -674,126 +674,91 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 			}
 
 			// ====================================================================
-			// STRATEGY B: ONLINE MODE - Cache First (if fresh)
+			// STRATEGY B: CACHE-FIRST LOADING (Online or Offline)
 			// ====================================================================
-			// Use cache if we already have fresh data from server this session
-			// This prevents redundant server fetches on page refreshes/navigations
-			// Condition: serverDataFresh=true AND cache is ready
-			if (!shouldFetchFromServer && stats.cacheReady && stats.items > 0) {
-				log.info("Using cached items (already fetched from server this session)")
-				try {
-					// Load limit based on filter configuration
-					// Same logic as offline mode - filters need all data
-					const limit = hasFilters ? 10000 : itemsPerPage.value
-					const cached = await offlineWorker.searchCachedItems("", limit)
+			// Always try to load from cache first to show data immediately.
+			// Then, if online, trigger background sync to ensure completeness.
 
-					if (cached && cached.length > 0) {
-						replaceAllItems(cached)
-						totalItemsLoaded.value = cached.length
-						currentOffset.value = cached.length
-						hasMore.value = hasFilters ? false : cached.length >= itemsPerPage.value
-						loading.value = false
-						log.success(`Loaded ${cached.length} items from cache`)
-						return // Exit early - cache hit, no server fetch needed
-					}
-				} catch (cacheError) {
-					log.warn("Cache load failed, will fetch from server", cacheError)
-					// Fall through to server fetch
+			let loadedFromCache = false
+			try {
+				const limit = hasFilters ? 10000 : itemsPerPage.value
+				const cached = await offlineWorker.searchCachedItems("", limit)
+
+				if (cached && cached.length > 0) {
+					replaceAllItems(cached)
+					totalItemsLoaded.value = cached.length
+					currentOffset.value = cached.length
+					hasMore.value = hasFilters ? false : cached.length >= itemsPerPage.value
+					loading.value = false // Interactive immediately
+					loadedFromCache = true
+					log.success(`Loaded ${cached.length} items from cache`)
 				}
+			} catch (cacheError) {
+				log.warn("Cache load failed", cacheError)
 			}
 
 			// ====================================================================
-			// STRATEGY C: ONLINE MODE - Server Fetch (fresh data needed)
+			// STRATEGY C: BACKGROUND SYNC (Online only)
 			// ====================================================================
-			// Fetch from server when:
-			// - First load (serverDataFresh = false)
-			// - Forced refresh (forceServerFetch = true)
-			// - Cache not available or cache load failed
-			log.debug("Fetching fresh data from server")
+			// If we are online, we must ensure the cache is complete and up-to-date.
+			// This runs even if we loaded from cache, to "sync remaining items" or updates.
 
-			// ----------------------------------------------------------------
-			// FILTERED LOADING PATH: Load ALL items from specified groups
-			// ----------------------------------------------------------------
-			// When POS Profile has item group filters (e.g., Bundles, Electronics),
-			// fetch ALL items from ALL specified groups in parallel for fast loading
-			// and complete client-side filtering capabilities.
-			if (hasFilters) {
-				log.debug(`Fetching items from ${itemGroupFilters.length} filtered groups`)
+			if (!offline) {
+				log.debug("Online: checking/syncing with server in background")
 
-				// Parallel fetch from multiple groups for optimal performance
-				// Example: Fetch "Bundles" (500 items) + "Electronics" (300 items) simultaneously
-				const fetchedItems = await fetchItemsFromGroups(profile, itemGroupFilters)
+				if (hasFilters) {
+					// Filtered View: Fetch ALL matching items to ensure completeness
+					// Run in background (don't await blocking UI if we loaded from cache)
+					const syncPromise = (async () => {
+						try {
+							const fetchedItems = await fetchItemsFromGroups(profile, itemGroupFilters)
 
-				// CRITICAL: Store ALL fetched items (not just first page)
-				// Why? Client-side filtering needs complete dataset to switch between groups instantly
-				// Example: User clicks "Bundles" → filter 800 items to show 500 bundles (instant!)
-				//          User clicks "Electronics" → filter 800 items to show 300 electronics (instant!)
-				// Pagination is handled by the UI component (virtual scrolling), not here
-				replaceAllItems(fetchedItems)
-				totalItemsLoaded.value = fetchedItems.length
-				currentOffset.value = fetchedItems.length
+							if (fetchedItems.length > 0) {
+								// Update store with fresh data
+								replaceAllItems(fetchedItems)
+								totalItemsLoaded.value = fetchedItems.length
+								currentOffset.value = fetchedItems.length
+								hasMore.value = false
 
-				// Disable infinite scroll - all filtered data already loaded
-				// Scrolling will show more items from the existing array (UI pagination)
-				hasMore.value = false
+								// Update cache
+								await offlineWorker.cacheItems(fetchedItems)
+								cacheReady.value = true
+								serverDataFresh.value = true
+								log.success(`Synced ${fetchedItems.length} filtered items from server`)
+							}
+						} catch (err) {
+							log.error("Background filtered sync failed", err)
+						}
+					})()
 
-				if (fetchedItems.length > 0) {
-					// Clear cache first to remove any disabled/stale items, then cache fresh data
-					await offlineWorker.clearItemsCache()
-					await offlineWorker.cacheItems(fetchedItems)
-					cacheReady.value = true
-
-					// Mark data as fresh - prevents redundant fetches on page refresh
-					serverDataFresh.value = true
-
-					log.success(`Loaded and cached ${fetchedItems.length} filtered items`)
+					if (!loadedFromCache) {
+						await syncPromise // Await if we have nothing showing
+					}
 				} else {
-					log.info('No items found for the selected filter groups')
-				}
+					// Unfiltered View: Ensure we have at least the first batch fresh
+					// Then start background sync for the rest
+					if (!loadedFromCache || forceServerFetch) {
+						const response = await call("pos_next.api.items.get_items", {
+							pos_profile: profile,
+							search_term: "",
+							item_group: null,
+							start: 0,
+							limit: itemsPerPage.value,
+						})
+						const list = response?.message || response || []
 
-			// ----------------------------------------------------------------
-			// UNFILTERED LOADING PATH: Lazy load with infinite scroll
-			// ----------------------------------------------------------------
-			// When no filters (default "All Items" view), load first batch only
-			// and enable infinite scroll for progressive loading. Suitable for
-			// large catalogs (1000+ items) to minimize initial load time.
-			} else {
-				log.debug(`Fetching ${itemsPerPage.value} items (no filters)`)
+						if (list.length > 0) {
+							replaceAllItems(list)
+							totalItemsLoaded.value = list.length
+							currentOffset.value = list.length
+							hasMore.value = true
+							await offlineWorker.cacheItems(list)
+							serverDataFresh.value = true
+						}
+					}
 
-				// Fetch first batch (e.g., 20-50 items) for fast initial render
-				const response = await call("pos_next.api.items.get_items", {
-					pos_profile: profile,
-					search_term: "",
-					item_group: null, // No filter - get items from all groups
-					start: 0,
-					limit: itemsPerPage.value,
-				})
-				const list = response?.message || response || []
-
-				if (list.length > 0) {
-					// Store first batch in allItems
-					replaceAllItems(list)
-					totalItemsLoaded.value = list.length
-					currentOffset.value = list.length
-
-					// Enable infinite scroll - more items available
-					// loadMoreItems() will fetch additional batches as user scrolls
-					hasMore.value = true
-
-					// Clear cache first to remove any disabled/stale items, then cache fresh data
-					await offlineWorker.clearItemsCache()
-					await offlineWorker.cacheItems(list)
-
-					// Mark data as fresh
-					serverDataFresh.value = true
-
-					log.success(`Loaded ${list.length} items from server`)
-				}
-
-				// Start background sync to cache remaining items over time
-				// This improves offline experience without blocking initial load
-				// Only start if cache is new or has few items
-				if (!stats.cacheReady || stats.items < 50) {
+					// Always start background sync to ensure "no item left behind"
+					// This will fill the cache with remaining items pages
 					startBackgroundCacheSync(profile, [])
 				}
 			}
@@ -1132,11 +1097,13 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 				// Get search limit once for this search operation
 				const searchLimit = performanceConfig.get("searchBatchSize") || 500
 
+				let foundInCache = false
+
 				try {
 					// CACHE-FIRST STRATEGY:
 					// 1. Search IndexedDB cache first (instant!)
 					// 2. If cache has results, show them immediately
-					// 3. Then search server for fresh results in background
+					// 3. Then search server for fresh results in background (if online)
 
 					log.debug(`Searching cache for: "${term}"`)
 					const cached = await offlineWorker.searchCachedItems(term, searchLimit)
@@ -1145,60 +1112,63 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 						// Show cached results immediately (instant!)
 						setSearchResults(cached)
 						searching.value = false
+						foundInCache = true
 						log.success(`Found ${cached.length} items in cache`)
 
-						// Resolve with cached results
-						resolve(cached)
+						// If offline, we are done
+						if (isOffline()) {
+							resolve(cached)
+							return
+						}
 					}
 
-					// Now search server in background for fresh results
+					// Skip server search if offline
+					if (isOffline()) {
+						if (!foundInCache) {
+							setSearchResults([])
+							resolve([])
+						}
+						return
+					}
+
+					// Now search server in background for fresh results (if online)
 					log.debug(`Searching server for: "${term}"`)
 					const response = await call("pos_next.api.items.get_items", {
 						pos_profile: posProfile.value,
 						search_term: term,
 						item_group: selectedItemGroup.value,
 						start: 0,
-						limit: searchLimit, // Dynamically adjusted based on device performance
+						limit: searchLimit,
 					})
 					const serverResults = response?.message || response || []
 
 					if (serverResults.length > 0) {
-						// Update with fresh server results
+						// Update with fresh server results (merging happens in setSearchResults via reactivity)
 						setSearchResults(serverResults)
 						log.success(`Found ${serverResults.length} items on server`)
 
 						// Cache server results for future searches
 						await offlineWorker.cacheItems(serverResults)
 
-						// If we didn't resolve with cache, resolve with server results
-						if (!cached || cached.length === 0) {
+						if (!foundInCache) {
 							resolve(serverResults)
 						}
-					} else if (!cached || cached.length === 0) {
+					} else if (!foundInCache) {
 						// No results from either cache or server
 						setSearchResults([])
 						resolve([])
 					}
 				} catch (error) {
 					log.error("Error searching items", error)
-
-					// If we haven't shown cache results yet, try cache as fallback
-					if (!searchResults.value || searchResults.value.length === 0) {
-						try {
-							const cached = await offlineWorker.searchCachedItems(term, searchLimit)
-							setSearchResults(cached || [])
-							resolve(cached || [])
-							log.info(`Fallback: found ${cached?.length || 0} items in cache`)
-						} catch (cacheError) {
-							log.error("Cache search also failed", cacheError)
-							setSearchResults([])
-							resolve([])
-						}
+					// Error handled, existing results preserved
+					if (!foundInCache) {
+						setSearchResults([])
+						resolve([])
 					}
 				} finally {
 					searching.value = false
 				}
-			}, performanceConfig.get("searchDebounce")) // Reactive: auto-adjusted 500ms/300ms/150ms based on device
+			}, performanceConfig.get("searchDebounce"))
 		})
 	}
 

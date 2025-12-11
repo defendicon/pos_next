@@ -1,6 +1,7 @@
 import { call } from "@/utils/apiWrapper"
 import { db, getSetting, setSetting } from "./db"
 import { offlineState } from "./offlineState"
+import { offlineWorker } from "@/utils/offline/workerClient"
 
 // Cache structure definition - modify this when cache structure changes
 const CACHE_STRUCTURE = {
@@ -158,36 +159,134 @@ export const toggleManualOffline = async () => {
 }
 
 // Load items from server (returns data for worker to cache)
-export const cacheItemsFromServer = async (posProfile) => {
+export const cacheItemsFromServer = async (posProfile, options = {}) => {
 	try {
-		console.log("Fetching items from server...")
+		console.log("Starting robust item sync...", options)
 
-		const response = await call("pos_next.api.items.get_items", {
-			pos_profile: posProfile,
-			start: 0,
-			limit: 9999, // Get all items
+		// Use the robust sync logic
+		await syncAllItems(posProfile, options)
+
+		return { success: true }
+	} catch (error) {
+		console.error("Error in item sync:", error)
+		throw error
+	}
+}
+
+/**
+ * Robust item sync mechanism that ensures all items are fetched from server
+ * by comparing server count with local count and retrying if necessary.
+ *
+ * @param {string} posProfile - POS Profile name
+ * @param {object} options - Sync options
+ * @param {boolean} options.force - Force full sync even if counts match
+ */
+async function syncAllItems(posProfile, options = {}) {
+	const BATCH_SIZE = 1000
+	const MAX_RETRIES = 5
+	const MAX_BATCH_RETRIES = 3
+	let retryCount = 0
+
+	try {
+		// 1. Get total item count from server
+		// Pass item_group if needed, but for now we sync everything for the profile
+		const serverCount = await call("pos_next.api.items.get_item_count", {
+			pos_profile: posProfile
 		})
 
-		if (response.message && Array.isArray(response.message)) {
-			const items = response.message
+		console.log(`Server has ${serverCount} items`)
 
-			// Process items to add searchable fields
-			const processedItems = items.map((item) => ({
-				...item,
-				barcodes: item.item_barcode
-					? Array.isArray(item.item_barcode)
-						? item.item_barcode.map((b) => b.barcode).filter(Boolean)
-						: [item.item_barcode]
-					: [],
-			}))
+		// 2. Determine if sync is needed
+		const localCount = await db.items.count()
 
-			console.log(`Fetched ${processedItems.length} items from server`)
-			return { items: processedItems }
+		// If force sync is requested, or if we have missing items, proceed.
+		// Also proceed if counts match but we specifically want to update (implicit in "Sync Master Data").
+		// However, for "Auto Sync", we might want to be efficient.
+		// But since the requirement is "sync again until ... same", we should check count.
+		// To support UPDATES (where count is same but data changed), we should probably
+		// check a timestamp or hash, but lacking that, we can assume manual sync (force=true) implies full fetch.
+		// If called automatically, we rely on count mismatch or empty cache.
+
+		if (localCount >= serverCount && !options.force && localCount > 0) {
+			console.log(`Sync skipped: Local count (${localCount}) >= Server count (${serverCount}) and not forced.`)
+			return
 		}
 
-		return { items: [] }
+		// 3. Fetch items in batches
+		const totalBatches = Math.ceil(serverCount / BATCH_SIZE) || 1
+
+		// If forcing, maybe clear cache first?
+		// "offlineWorker.cacheItems" uses "bulkPut" which upserts.
+		// Clearing is safer for deleted items but slower.
+		// Let's stick to upsert for robustness.
+
+		// Retry loop for the whole process if final verification fails
+		while (true) {
+
+			for (let i = 0; i < totalBatches; i++) {
+				const start = i * BATCH_SIZE
+
+				let batchSuccess = false
+				let batchRetries = 0
+
+				// Retry loop for individual batch
+				while (!batchSuccess && batchRetries < MAX_BATCH_RETRIES) {
+					try {
+						console.log(`Fetching batch ${i+1}/${totalBatches} (Start: ${start})...`)
+
+						const response = await call("pos_next.api.items.get_items", {
+							pos_profile: posProfile,
+							start: start,
+							limit: BATCH_SIZE
+						})
+
+						const items = response.message || []
+
+						if (items.length > 0) {
+							const processedItems = items.map((item) => ({
+								...item,
+								barcodes: item.item_barcode
+									? Array.isArray(item.item_barcode)
+										? item.item_barcode.map((b) => b.barcode).filter(Boolean)
+										: [item.item_barcode]
+									: [],
+							}))
+
+							await offlineWorker.cacheItems(processedItems)
+						}
+						batchSuccess = true
+					} catch (err) {
+						console.error(`Error fetching batch ${start}, retry ${batchRetries}:`, err)
+						batchRetries++
+						await new Promise(r => setTimeout(r, 1000 * batchRetries))
+					}
+				}
+
+				if (!batchSuccess) {
+					console.error(`Failed to fetch batch starting at ${start} after ${MAX_BATCH_RETRIES} retries.`)
+					// If a batch fails, the final count check will likely fail and trigger outer retry.
+				}
+			}
+
+			// Verification
+			const finalLocalCount = await db.items.count()
+			if (finalLocalCount >= serverCount) {
+				console.log(`Sync complete! Local: ${finalLocalCount}, Server: ${serverCount}`)
+				break
+			}
+
+			if (retryCount >= MAX_RETRIES) {
+				console.warn(`Max outer retries reached. Local: ${finalLocalCount}, Server: ${serverCount}`)
+				break
+			}
+
+			console.log(`Sync mismatch. Local: ${finalLocalCount}, Server: ${serverCount}. Retrying missing items...`)
+			retryCount++
+			await new Promise(r => setTimeout(r, 2000))
+		}
+
 	} catch (error) {
-		console.error("Error fetching items from server:", error)
+		console.error("Sync failed:", error)
 		throw error
 	}
 }

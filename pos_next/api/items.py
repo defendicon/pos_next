@@ -1745,3 +1745,42 @@ def get_product_bundle_availability(item_code, warehouse):
 			f"Bundle Availability Error: {item_code} in {warehouse}"
 		)
 		frappe.throw(_("Error fetching bundle availability for {0}: {1}").format(item_code, str(e)))
+
+@frappe.whitelist()
+def get_item_count(pos_profile, item_group=None):
+	"""Get total count of items available for the POS Profile"""
+	try:
+		# Parse pos_profile if it's a JSON string
+		if isinstance(pos_profile, str):
+			try:
+				pos_profile = json.loads(pos_profile)
+			except (json.JSONDecodeError, ValueError):
+				pass  # It's already a plain string
+
+		# Ensure pos_profile is a string (handle dict or string input)
+		if isinstance(pos_profile, dict):
+			pos_profile = pos_profile.get("name") or pos_profile.get("pos_profile")
+
+		if not pos_profile:
+			frappe.throw(_("POS Profile is required"))
+
+		pos_profile_doc = frappe.get_cached_doc("POS Profile", pos_profile)
+
+		# Use the same condition builder as get_items
+		conditions, params = _build_item_base_conditions(pos_profile_doc, item_group)
+
+		# Build WHERE clause
+		where_clause = " AND ".join(conditions)
+
+		query = f"""
+			SELECT COUNT(*)
+			FROM `tabItem`
+			WHERE {where_clause}
+		"""
+
+		count = frappe.db.sql(query, tuple(params))[0][0]
+		return count
+
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Get Item Count Error")
+		frappe.throw(_("Error fetching item count: {0}").format(str(e)))

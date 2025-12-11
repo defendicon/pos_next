@@ -17,6 +17,7 @@
 import { useToast } from "@/composables/useToast"
 import {
 	cacheCustomersFromServer,
+	cacheItemsFromServer,
 	cachePaymentMethodsFromServer,
 	syncOfflineInvoices,
 } from "@/utils/offline"
@@ -239,7 +240,7 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 	}
 
 	/**
-	 * Preload data for offline use (payment methods, customers)
+	 * Preload data for offline use (payment methods, customers, items)
 	 * @param {Object} currentProfile - Current POS profile
 	 */
 	async function preloadDataForOffline(currentProfile) {
@@ -270,10 +271,23 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 				// Continue with other data loading
 			}
 
-			// Load customers if cache needs refresh
+			// Load items and customers if cache needs refresh
 			if (!cacheReady || needsRefresh) {
-				showSuccess(__("Loading customers for offline use..."))
+				// 1. Sync Items
+				showSuccess(__("Syncing items for offline use..."))
+				try {
+					// cacheItemsFromServer now handles fetching and caching iteratively (Robust Sync)
+					// We pass { force: true } if cache is expired (needsRefresh) to ensure we get updates
+					// even if item counts happen to match.
+					await cacheItemsFromServer(currentProfile.name, { force: true })
+					log.success('Items sync completed successfully')
+				} catch (error) {
+					log.error('Items sync failed:', error)
+					showWarning(__("Failed to sync some items"))
+				}
 
+				// 2. Sync Customers
+				showSuccess(__("Loading customers for offline use..."))
 				const customersData = await cacheCustomersFromServer(currentProfile.name)
 				await cacheData([], customersData.customers || [])
 
@@ -282,6 +296,63 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 		} catch (error) {
 			log.error('Failed to preload offline data', error)
 			showWarning(__("Some data may not be available offline"))
+		}
+	}
+
+	/**
+	 * Explicitly sync master data (items and customers) from server.
+	 * Forces a full sync check even if cache appears fresh.
+	 *
+	 * @param {Object} currentProfile - Current POS profile
+	 */
+	async function syncMasterData(currentProfile) {
+		if (!currentProfile || isOffline.value) {
+			showWarning(__("Cannot sync while offline"))
+			return
+		}
+
+		try {
+			showSuccess(__("Syncing master data..."))
+			log.info('Starting manual master data sync')
+
+			// 1. Sync Items (Robust Sync with force=true)
+			try {
+				await cacheItemsFromServer(currentProfile.name, { force: true })
+				log.success('Manual item sync completed')
+			} catch (error) {
+				log.error('Manual item sync failed:', error)
+				showWarning(__("Failed to sync items"))
+			}
+
+			// 2. Sync Customers
+			// Note: Customer sync logic is simpler (fetch all), so we just call it
+			try {
+				const customersData = await cacheCustomersFromServer(currentProfile.name)
+				await cacheData([], customersData.customers || [])
+				log.success('Manual customer sync completed')
+			} catch (error) {
+				log.error('Manual customer sync failed:', error)
+				showWarning(__("Failed to sync customers"))
+			}
+
+			// 3. Payment Methods
+			try {
+				const paymentMethodsData = await cachePaymentMethodsFromServer(currentProfile.name)
+				if (paymentMethodsData.payment_methods?.length > 0) {
+					const methodsWithProfile = paymentMethodsData.payment_methods.map((method) => ({
+						...method,
+						pos_profile: currentProfile.name,
+					}))
+					await offlineWorker.cachePaymentMethods(methodsWithProfile)
+				}
+			} catch (error) {
+				log.error('Manual payment methods sync failed:', error)
+			}
+
+			showSuccess(__("Master data synced successfully"))
+		} catch (error) {
+			log.error('Master data sync failed:', error)
+			showError(__("Master data sync failed"))
 		}
 	}
 
@@ -341,5 +412,6 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 		checkOfflineCacheAvailability,
 		checkCacheReady,
 		getCacheStats,
+		syncMasterData,
 	}
 })

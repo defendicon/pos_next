@@ -165,6 +165,7 @@ async function initDB() {
 let serverOnline = true
 let manualOffline = false
 let csrfToken = null // CSRF token passed from main thread
+let currentPosProfile = null // Current POS Profile
 
 // Periodic stock sync state
 let stockSyncInterval = null
@@ -1079,6 +1080,86 @@ async function updateStockQuantities(stockUpdates) {
 // ============================================================================
 
 /**
+ * Get total item count from server for the current profile
+ */
+async function getRemoteItemCount() {
+	if (!currentPosProfile) return 0
+
+	try {
+		const response = await fetch(`/api/method/pos_next.api.items.get_item_count?pos_profile=${encodeURIComponent(currentPosProfile)}`, {
+			method: 'GET',
+			headers: {
+				'Accept': 'application/json',
+				...(csrfToken ? { 'X-Frappe-CSRF-Token': csrfToken } : {})
+			}
+		})
+
+		if (!response.ok) return 0
+		const data = await response.json()
+		return data?.message || 0
+	} catch (error) {
+		log.error('Error getting remote item count', error)
+		return 0
+	}
+}
+
+/**
+ * Sync all items from server to cache
+ */
+async function syncAllItems() {
+	if (!currentPosProfile) return
+
+	log.info('Starting full item sync...')
+	const BATCH_SIZE = 500
+	let start = 0
+	let hasMore = true
+	let totalSynced = 0
+
+	try {
+		while (hasMore) {
+			const response = await fetch(`/api/method/pos_next.api.items.get_items?pos_profile=${encodeURIComponent(currentPosProfile)}&start=${start}&limit=${BATCH_SIZE}`, {
+				method: 'GET',
+				headers: {
+					'Accept': 'application/json',
+					...(csrfToken ? { 'X-Frappe-CSRF-Token': csrfToken } : {})
+				}
+			})
+
+			if (!response.ok) break
+
+			const data = await response.json()
+			const items = data?.message || []
+
+			if (items.length > 0) {
+				await cacheItemsFromServer(items)
+				totalSynced += items.length
+				start += items.length
+
+				// Update tracked items for stock sync if needed
+				items.forEach(item => trackedItemCodes.add(item.item_code))
+			} else {
+				hasMore = false
+			}
+
+			// Safety break
+			if (items.length < BATCH_SIZE) hasMore = false
+		}
+
+		log.success(`Full item sync completed. Synced ${totalSynced} items.`)
+
+		// Update cache stats
+		const stats = await getCacheStats()
+		self.postMessage({
+			type: 'CACHE_STATS_UPDATED',
+			payload: stats
+		})
+
+	} catch (error) {
+		log.error('Error during full item sync', error)
+	}
+}
+
+/**
  * Fetch stock quantities from server for tracked items
  * @returns {Promise<Array>} Stock updates array
  */
@@ -1090,7 +1171,7 @@ async function fetchStockFromServer() {
 
 	try {
 		const controller = new AbortController()
-		const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout
+		const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
 
 		const itemCodes = Array.from(trackedItemCodes)
 
@@ -1150,6 +1231,27 @@ async function performStockSync() {
 		stockSyncRunning = true
 		const startTime = Date.now()
 
+		// ----------------------------------------------------------------
+		// STEP 1: Auto-Sync Items Check
+		// ----------------------------------------------------------------
+		// Check if total items on server matches local cache
+		// If mismatch, trigger full item sync before updating stock
+		if (currentPosProfile) {
+			const db = await initDB()
+
+			// Get counts
+			const localCount = await db.table("items").count()
+			const remoteCount = await getRemoteItemCount()
+
+			if (remoteCount > 0 && localCount !== remoteCount) {
+				log.warn(`Item count mismatch (Local: ${localCount}, Remote: ${remoteCount}). triggering auto-sync...`)
+				await syncAllItems()
+			}
+		}
+
+		// ----------------------------------------------------------------
+		// STEP 2: Stock Sync
+		// ----------------------------------------------------------------
 		// Fetch fresh stock from server
 		const stockUpdates = await fetchStockFromServer()
 
@@ -1292,6 +1394,11 @@ self.onmessage = async (event) => {
 		switch (type) {
 			case "SET_CSRF_TOKEN":
 				csrfToken = payload.token
+				result = { success: true }
+				break
+
+			case "SET_POS_PROFILE":
+				currentPosProfile = payload.posProfile
 				result = { success: true }
 				break
 

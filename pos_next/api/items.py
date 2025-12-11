@@ -944,27 +944,39 @@ def _get_bundle_warehouse_availability_bulk(bundle_codes, warehouses):
 	return dict(result)
 
 
+def _get_item_filters(pos_profile_doc):
+	"""Get base filters for POS items"""
+	filters = {
+		"disabled": 0,
+		"is_sales_item": 1,
+		"ifnull(variant_of, '')": "",
+	}
+
+	if pos_profile_doc.company:
+		filters["ifnull(custom_company, '')"] = ["in", [pos_profile_doc.company, ""]]
+
+	return filters
+
+
+@frappe.whitelist()
+def get_item_count(pos_profile):
+	"""Get total count of items available for POS"""
+	try:
+		pos_profile_doc = frappe.get_cached_doc("POS Profile", pos_profile)
+		filters = _get_item_filters(pos_profile_doc)
+		return frappe.db.count("Item", filters=filters)
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Get Item Count Error")
+		return 0
+
+
 @frappe.whitelist()
 def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20):
 	"""Get items for POS with stock, price, and tax details"""
 	try:
 		pos_profile_doc = frappe.get_cached_doc("POS Profile", pos_profile)
 
-		filters = {
-			"disabled": 0,
-			"is_sales_item": 1,  # Only show items with "Allow Sales" enabled
-			"ifnull(variant_of, '')": "",  # Exclude items that are variants of a template
-		}
-
-		# IMPORTANT: Filtering logic explained:
-		# - Template items (has_variants=1) are shown → users select variants via dialog
-		# - Regular items (has_variants=0, variant_of is null) are shown → direct add to cart
-		# - Variant items (has_variants=0, variant_of is not null) are HIDDEN from main list
-
-		# Add company filter - show items for specific company + global items (empty company)
-		# Global items (custom_company is empty) are available to all companies
-		if pos_profile_doc.company:
-			filters["ifnull(custom_company, '')"] = ["in", [pos_profile_doc.company, ""]]
+		filters = _get_item_filters(pos_profile_doc)
 
 		# Add item group filter if provided
 		if item_group:

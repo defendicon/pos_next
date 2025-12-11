@@ -8,12 +8,14 @@ import { defineStore } from "pinia"
 import { computed, ref } from "vue"
 import { useStockStore } from "./stock"
 import { useRealtimePosProfile } from "@/composables/useRealtimePosProfile"
+import { useToast } from "@/composables/useToast"
 
 const log = logger.create('ItemSearch')
 
 export const useItemSearchStore = defineStore("itemSearch", () => {
 	// Get stock store instance
 	const stockStore = useStockStore()
+	const { showError } = useToast()
 
 	// Real-time POS Profile updates
 	const { onPosProfileUpdate } = useRealtimePosProfile()
@@ -245,11 +247,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 			})
 
 			// Last resort: Show user a message
-			// TODO: Integrate with notification system
-			console.error(
-				"Failed to update item cache. Please refresh the page manually.",
-				recoveryError
-			)
+			showError("Failed to update item cache. Please refresh the page manually.")
 		}
 	}
 
@@ -1440,6 +1438,7 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 		// ========================================================================
 		// ACTIONS - Items & Search
 		// ========================================================================
+		attemptFullCacheRecovery,
 		loadAllItems,
 		loadMoreItems,
 		searchItems,

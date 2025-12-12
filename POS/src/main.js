@@ -50,20 +50,36 @@ const log = logger.create("Main")
 // PWA Service Worker Registration
 // =============================================================================
 
+// Manually register Service Worker from the custom endpoint to ensure proper scope
 if ("serviceWorker" in navigator) {
 	window.addEventListener(
 		"load",
-		() => {
-			import("virtual:pwa-register").then(({ registerSW }) => {
-				registerSW({
-					immediate: true,
-					onNeedRefresh: () => log.info("New content available, reloading..."),
-					onOfflineReady: () => log.info("App ready to work offline"),
-					onRegistered: (reg) => log.info("Service Worker registered", reg),
-					onRegisterError: (err) =>
-						log.error("Service Worker registration error", err),
+		async () => {
+			try {
+				// We register from /pos_sw which serves the file with "Service-Worker-Allowed: /" header
+				const registration = await navigator.serviceWorker.register("/pos_sw", {
+					scope: "/pos",
 				})
-			})
+
+				log.info("Service Worker registered with scope:", registration.scope)
+
+				registration.addEventListener("updatefound", () => {
+					const newWorker = registration.installing
+					log.info("New Service Worker installing...")
+
+					newWorker.addEventListener("statechange", () => {
+						if (newWorker.state === "installed") {
+							if (navigator.serviceWorker.controller) {
+								log.info("New content available, reloading...")
+							} else {
+								log.info("App ready to work offline")
+							}
+						}
+					})
+				})
+			} catch (error) {
+				log.error("Service Worker registration failed:", error)
+			}
 		},
 		{ passive: true },
 	)

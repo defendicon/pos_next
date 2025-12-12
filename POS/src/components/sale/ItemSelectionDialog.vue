@@ -288,11 +288,15 @@ const confirmButtonText = computed(() => {
 const stockWarning = computed(() => {
 	if (props.mode !== "uom" || !selectedOption.value) return null
 
-	const availableStock = selectedOption.value.stock_qty ?? selectedOption.value.actual_qty ?? null
+	const availableStock =
+		selectedOption.value.stock_qty ?? selectedOption.value.actual_qty ?? null
 	if (availableStock === null) return null
 
 	if (quantity.value > availableStock) {
-		return __("Requested quantity ({0}) exceeds available stock ({1})", [quantity.value, Math.floor(availableStock)])
+		return __("Requested quantity ({0}) exceeds available stock ({1})", [
+			quantity.value,
+			Math.floor(availableStock),
+		])
 	}
 	return null
 })
@@ -383,7 +387,7 @@ const variantsResource = createResource({
 			description: v.item_code,
 			attributes: v.attributes || {},
 			rate: v.rate || 0,
-			priceLabel: __('per {0}', [v.stock_uom]),
+			priceLabel: __("per {0}", [v.stock_uom]),
 			stock: v.actual_qty ?? 0,
 			data: v, // Full variant data
 		}))
@@ -461,7 +465,7 @@ function buildUomOptions() {
 		label: props.item.stock_uom,
 		description: __("Stock unit"),
 		rate: getUomPrice(props.item.stock_uom, 1),
-		priceLabel: __('per {0}', [props.item.stock_uom]),
+		priceLabel: __("per {0}", [props.item.stock_uom]),
 	})
 
 	// Additional UOMs
@@ -472,9 +476,13 @@ function buildUomOptions() {
 				uom: uomData.uom,
 				conversion_factor: uomData.conversion_factor,
 				label: uomData.uom,
-				description: __('1 {0} = {1} {2}', [uomData.uom, uomData.conversion_factor, props.item.stock_uom]),
+				description: __("1 {0} = {1} {2}", [
+					uomData.uom,
+					uomData.conversion_factor,
+					props.item.stock_uom,
+				]),
 				rate: getUomPrice(uomData.uom, uomData.conversion_factor),
-				priceLabel: __('per {0}', [uomData.uom]),
+				priceLabel: __("per {0}", [uomData.uom]),
 			})
 		})
 	}

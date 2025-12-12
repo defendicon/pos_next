@@ -225,7 +225,12 @@ const countrySearchQuery = ref("")
 const dropdownRef = ref(null)
 const countrySearchRef = ref(null)
 
-const customerGroups = ref(["Commercial", "Individual", "Non Profit", "Government"])
+const customerGroups = ref([
+	"Commercial",
+	"Individual",
+	"Non Profit",
+	"Government",
+])
 const territories = ref(["All Territories"])
 
 const customerData = ref({
@@ -246,7 +251,9 @@ const show = computed({
 })
 
 const currentCountryCode = computed(() => {
-	const country = countriesStore.countries.find((c) => c.isd === selectedCountryCode.value)
+	const country = countriesStore.countries.find(
+		(c) => c.isd === selectedCountryCode.value,
+	)
 	return country?.code.toLowerCase() || "eg"
 })
 
@@ -255,7 +262,10 @@ const filteredCountries = computed(() => {
 
 	const query = countrySearchQuery.value.toLowerCase()
 	return countriesStore.countries.filter(
-		(c) => c.name.toLowerCase().includes(query) || c.isd.includes(query) || c.code.toLowerCase().includes(query)
+		(c) =>
+			c.name.toLowerCase().includes(query) ||
+			c.isd.includes(query) ||
+			c.code.toLowerCase().includes(query),
 	)
 })
 
@@ -273,7 +283,9 @@ const selectCountry = (country) => {
 }
 
 const updateMobileNumber = () => {
-	customerData.value.mobile_no = phoneNumber.value ? `${selectedCountryCode.value}-${phoneNumber.value}` : ""
+	customerData.value.mobile_no = phoneNumber.value
+		? `${selectedCountryCode.value}-${phoneNumber.value}`
+		: ""
 }
 
 const handleClickOutside = (event) => {
@@ -303,7 +315,9 @@ const setCountryFromName = (countryName) => {
 const updateTerritoryFromCountry = () => {
 	if (!territories.value.length) return
 
-	const country = countriesStore.countries.find((c) => c.isd === selectedCountryCode.value)
+	const country = countriesStore.countries.find(
+		(c) => c.isd === selectedCountryCode.value,
+	)
 	if (!country) return
 
 	// Try exact match first
@@ -315,7 +329,9 @@ const updateTerritoryFromCountry = () => {
 
 	// Try fuzzy match
 	const fuzzyMatch = territories.value.find(
-		(t) => t.toLowerCase().includes(country.name.toLowerCase()) || country.name.toLowerCase().includes(t.toLowerCase())
+		(t) =>
+			t.toLowerCase().includes(country.name.toLowerCase()) ||
+			country.name.toLowerCase().includes(t.toLowerCase()),
 	)
 
 	if (fuzzyMatch) {
@@ -367,8 +383,14 @@ const createListResource = (doctype, onSuccess) =>
 		onError: (err) => log.error(`Error loading ${doctype}`, err),
 	})
 
-const customerGroupsResource = createListResource("Customer Group", (names) => (customerGroups.value = names))
-const territoriesResource = createListResource("Territory", (names) => (territories.value = names))
+const customerGroupsResource = createListResource(
+	"Customer Group",
+	(names) => (customerGroups.value = names),
+)
+const territoriesResource = createListResource(
+	"Territory",
+	(names) => (territories.value = names),
+)
 
 const posProfileResource = createResource({
 	url: "frappe.client.get_value",
@@ -443,7 +465,7 @@ const resetForm = () => {
 
 watch(
 	() => props.initialName,
-	(name) => name && (customerData.value.customer_name = name)
+	(name) => name && (customerData.value.customer_name = name),
 )
 
 watch(
@@ -454,7 +476,7 @@ watch(
 			selectedCountryCode.value = code
 			phoneNumber.value = rest.join("-")
 		}
-	}
+	},
 )
 
 watch(selectedCountryCode, async () => {
@@ -474,7 +496,7 @@ watch(
 	async (isOpen) => {
 		show.value = isOpen
 		isOpen ? await loadDialogData() : resetForm()
-	}
+	},
 )
 
 watch(show, (val) => emit("update:modelValue", val))

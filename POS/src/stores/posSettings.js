@@ -180,28 +180,34 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 	)
 
 	// Computed - Sales Persons
-	const enableSalesPersons = computed(() =>
-		settings.value.enable_sales_persons !== "Disabled"
+	const enableSalesPersons = computed(
+		() => settings.value.enable_sales_persons !== "Disabled",
 	)
-	const salesPersonsMode = computed(() =>
-		settings.value.enable_sales_persons || "Disabled"
+	const salesPersonsMode = computed(
+		() => settings.value.enable_sales_persons || "Disabled",
 	)
-	const isSingleSalesPerson = computed(() =>
-		settings.value.enable_sales_persons === "Single"
+	const isSingleSalesPerson = computed(
+		() => settings.value.enable_sales_persons === "Single",
 	)
-	const isMultipleSalesPersons = computed(() =>
-		settings.value.enable_sales_persons === "Multiple"
+	const isMultipleSalesPersons = computed(
+		() => settings.value.enable_sales_persons === "Multiple",
 	)
 
 	// Resource
 	const settingsResource = createResource({
 		url: "pos_next.pos_next.doctype.pos_settings.pos_settings.get_pos_settings",
 		onSuccess(data) {
-			console.log('[POSSettings Store] Loaded settings:', data)
+			console.log("[POSSettings Store] Loaded settings:", data)
 			if (data) {
 				Object.assign(settings.value, data)
-				console.log('[POSSettings Store] Updated settings.value:', settings.value)
-				console.log('[POSSettings Store] allowPartialPayment computed:', Boolean(settings.value.allow_partial_payment))
+				console.log(
+					"[POSSettings Store] Updated settings.value:",
+					settings.value,
+				)
+				console.log(
+					"[POSSettings Store] allowPartialPayment computed:",
+					Boolean(settings.value.allow_partial_payment),
+				)
 				isLoaded.value = true
 			}
 			isLoading.value = false
@@ -227,7 +233,10 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 			const bootstrapStore = useBootstrapStore()
 			const preloadedSettings = bootstrapStore.getPreloadedPOSSettings()
 			if (preloadedSettings && Object.keys(preloadedSettings).length > 0) {
-				console.log('[POSSettings Store] Using preloaded settings from bootstrap:', preloadedSettings)
+				console.log(
+					"[POSSettings Store] Using preloaded settings from bootstrap:",
+					preloadedSettings,
+				)
 				Object.assign(settings.value, preloadedSettings)
 				isLoaded.value = true
 				isLoading.value = false
@@ -235,7 +244,9 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 			}
 		} catch (error) {
 			// Bootstrap store may not be available, fall through to API call
-			console.log('[POSSettings Store] Bootstrap not available, fetching from API')
+			console.log(
+				"[POSSettings Store] Bootstrap not available, fetching from API",
+			)
 		}
 
 		// Fallback to API call

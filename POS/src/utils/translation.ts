@@ -23,7 +23,7 @@
  * @module translation
  */
 import { createResource } from "frappe-ui"
-import { App, ref } from "vue"
+import { type App, ref } from "vue"
 import { call } from "./apiWrapper"
 import { translationCache } from "./offline/translationCache"
 import { logger } from "./logger"
@@ -35,14 +35,14 @@ type Messages = Record<string, string>
 
 // Extend Window interface with translation globals
 declare global {
-  interface Window {
-    /** Global translation function */
-    __: typeof translate
-    /** Current translation dictionary */
-    translatedMessages?: Messages
-    /** Language switcher function */
-    $changeLanguage?: typeof changeLanguage
-  }
+	interface Window {
+		/** Global translation function */
+		__: typeof translate
+		/** Current translation dictionary */
+		translatedMessages?: Messages
+		/** Language switcher function */
+		$changeLanguage?: typeof changeLanguage
+	}
 }
 
 /**
@@ -56,10 +56,10 @@ const FALLBACK_LOCALE = "en"
 
 /** Options for locale loading behavior */
 type LoadOptions = {
-  /** Try cached translations first before network */
-  preferCache?: boolean
-  /** Force network fetch even if cache is fresh */
-  forceNetwork?: boolean
+	/** Try cached translations first before network */
+	preferCache?: boolean
+	/** Force network fetch even if cache is fresh */
+	forceNetwork?: boolean
 }
 
 /**
@@ -73,10 +73,10 @@ type LoadOptions = {
  * app.use(translationPlugin)
  */
 export default function translationPlugin(app: App) {
-  app.config.globalProperties.__ = translate
-  window.__ = translate
-  window.$changeLanguage = changeLanguage
-  init()
+	app.config.globalProperties.__ = translate
+	window.__ = translate
+	window.$changeLanguage = changeLanguage
+	init()
 }
 
 /**
@@ -98,16 +98,20 @@ export default function translationPlugin(app: App) {
  * // With context (for same source with different meanings)
  * __('Save', null, 'button')  // Uses key "Save:button"
  */
-export function translate(msg: string, replace?: Record<string, string>, ctx?: string | null): string {
-  const messages = window.translatedMessages || {}
-  const key = ctx ? `${msg}:${ctx}` : msg
-  let translated = messages[key] || messages[msg] || msg
+export function translate(
+	msg: string,
+	replace?: Record<string, string>,
+	ctx?: string | null,
+): string {
+	const messages = window.translatedMessages || {}
+	const key = ctx ? `${msg}:${ctx}` : msg
+	let translated = messages[key] || messages[msg] || msg
 
-  if (replace) {
-    translated = translated.replace(/{(\d+)}/g, (_, n) => replace[n] ?? _)
-  }
+	if (replace) {
+		translated = translated.replace(/{(\d+)}/g, (_, n) => replace[n] ?? _)
+	}
 
-  return translated
+	return translated
 }
 
 /** Alias for translate function */
@@ -119,13 +123,13 @@ export const __ = translate
  * @returns Lowercase locale code
  */
 const getLocale = (): string => {
-  if (typeof window === "undefined") return FALLBACK_LOCALE
+	if (typeof window === "undefined") return FALLBACK_LOCALE
 
-  return (
-    (window as any)?.frappe?.boot?.lang?.toLowerCase() ||
-    window.localStorage?.getItem("pos_next_language")?.toLowerCase() ||
-    FALLBACK_LOCALE
-  )
+	return (
+		(window as any)?.frappe?.boot?.lang?.toLowerCase() ||
+		window.localStorage?.getItem("pos_next_language")?.toLowerCase() ||
+		FALLBACK_LOCALE
+	)
 }
 
 /**
@@ -133,9 +137,9 @@ const getLocale = (): string => {
  * Uses stale-while-revalidate: shows cached immediately, refreshes in background.
  */
 async function init() {
-  const locale = getLocale()
-  const loaded = await loadLocale(locale, { preferCache: true })
-  if (!loaded) fallbackFetch(locale)
+	const locale = getLocale()
+	const loaded = await loadLocale(locale, { preferCache: true })
+	if (!loaded) fallbackFetch(locale)
 }
 
 /**
@@ -143,8 +147,8 @@ async function init() {
  * @param messages - New translation dictionary
  */
 function applyMessages(messages: Messages) {
-  window.translatedMessages = messages
-  translationVersion.value++
+	window.translatedMessages = messages
+	translationVersion.value++
 }
 
 /**
@@ -152,8 +156,8 @@ function applyMessages(messages: Messages) {
  * @returns Translation dictionary or null on failure
  */
 async function requestTranslations() {
-  const messages = await call("frappe.translate.get_app_translations", {})
-  return (messages as Messages) || null
+	const messages = await call("frappe.translate.get_app_translations", {})
+	return (messages as Messages) || null
 }
 
 /**
@@ -169,32 +173,36 @@ async function requestTranslations() {
  * @returns True if translations were successfully applied
  */
 async function loadLocale(locale: string, options: LoadOptions = {}) {
-  const { preferCache = false, forceNetwork = false } = options
-  const target = locale || FALLBACK_LOCALE
-  let appliedFromCache = false
+	const { preferCache = false, forceNetwork = false } = options
+	const target = locale || FALLBACK_LOCALE
+	let appliedFromCache = false
 
-  if (preferCache) {
-    const cached = await translationCache.get(target)
-    if (cached?.messages) {
-      applyMessages(cached.messages)
-      appliedFromCache = true
+	if (preferCache) {
+		const cached = await translationCache.get(target)
+		if (cached?.messages) {
+			applyMessages(cached.messages)
+			appliedFromCache = true
 
-      if (!translationCache.isStale(cached.timestamp) && !forceNetwork) {
-        return true
-      }
-    }
-  }
+			if (!translationCache.isStale(cached.timestamp) && !forceNetwork) {
+				return true
+			}
+		}
+	}
 
-  const entry = await translationCache.getFresh(target, () => requestTranslations(), {
-    force: forceNetwork,
-  })
+	const entry = await translationCache.getFresh(
+		target,
+		() => requestTranslations(),
+		{
+			force: forceNetwork,
+		},
+	)
 
-  if (entry?.messages) {
-    applyMessages(entry.messages)
-    return true
-  }
+	if (entry?.messages) {
+		applyMessages(entry.messages)
+		return true
+	}
 
-  return appliedFromCache
+	return appliedFromCache
 }
 
 /**
@@ -203,14 +211,15 @@ async function loadLocale(locale: string, options: LoadOptions = {}) {
  * @param locale - Locale code for logging
  */
 function fallbackFetch(locale?: string) {
-  createResource({
-    url: "frappe.translate.get_app_translations",
-    method: "GET",
-    cache: "translations",
-    auto: true,
-    transform: (messages: Messages) => applyMessages(messages),
-    onError: () => log.warn(`Failed to load translations for ${locale || FALLBACK_LOCALE}`),
-  })
+	createResource({
+		url: "frappe.translate.get_app_translations",
+		method: "GET",
+		cache: "translations",
+		auto: true,
+		transform: (messages: Messages) => applyMessages(messages),
+		onError: () =>
+			log.warn(`Failed to load translations for ${locale || FALLBACK_LOCALE}`),
+	})
 }
 
 /**
@@ -224,6 +233,9 @@ function fallbackFetch(locale?: string) {
  * await changeLanguage('ar')
  */
 export async function changeLanguage(locale: string): Promise<void> {
-  const success = await loadLocale(locale, { preferCache: true, forceNetwork: true })
-  if (!success) fallbackFetch(locale)
+	const success = await loadLocale(locale, {
+		preferCache: true,
+		forceNetwork: true,
+	})
+	if (!success) fallbackFetch(locale)
 }

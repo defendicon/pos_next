@@ -714,8 +714,8 @@ import EditItemDialog from "./EditItemDialog.vue"
  * STORES & COMPOSABLES
  * ============================================================================
  */
-const cartStore = usePOSCartStore()      // Pinia store for cart state management
-const offersStore = usePOSOffersStore()  // Pinia store for offers/promotions
+const cartStore = usePOSCartStore() // Pinia store for cart state management
+const offersStore = usePOSOffersStore() // Pinia store for offers/promotions
 const { formatQuantity } = useFormatters() // Quantity formatting utilities
 
 /**
@@ -777,24 +777,24 @@ const props = defineProps({
  * Events emitted to parent component for cart operations
  */
 const emit = defineEmits([
-	"update-quantity",    // (itemCode, newQty, uom?) - Update item quantity
-	"remove-item",        // (itemCode, uom?) - Remove item from cart
-	"select-customer",    // (customer) - Select/change customer
-	"create-customer",    // (searchText) - Open create customer dialog
+	"update-quantity", // (itemCode, newQty, uom?) - Update item quantity
+	"remove-item", // (itemCode, uom?) - Remove item from cart
+	"select-customer", // (customer) - Select/change customer
+	"create-customer", // (searchText) - Open create customer dialog
 	"proceed-to-payment", // () - Navigate to payment screen
-	"clear-cart",         // () - Clear all items from cart
-	"save-draft",         // () - Save current cart as draft/hold order
-	"apply-coupon",       // () - Open coupon application dialog
-	"show-coupons",       // () - Show available coupons
-	"show-offers",        // () - Show available offers dialog
-	"remove-offer",       // (offerId) - Remove applied offer
-	"update-uom",         // (itemCode, newUom) - Change item's unit of measure
-	"edit-item",          // (item) - Open item edit dialog
-	"view-shift",         // () - View current shift details
-	"show-drafts",        // () - Show draft/held orders
-	"show-history",       // () - Show invoice history
-	"show-return",        // () - Open return invoice dialog
-	"close-shift",        // () - Close current shift
+	"clear-cart", // () - Clear all items from cart
+	"save-draft", // () - Save current cart as draft/hold order
+	"apply-coupon", // () - Open coupon application dialog
+	"show-coupons", // () - Show available coupons
+	"show-offers", // () - Show available offers dialog
+	"remove-offer", // (offerId) - Remove applied offer
+	"update-uom", // (itemCode, newUom) - Change item's unit of measure
+	"edit-item", // (item) - Open item edit dialog
+	"view-shift", // () - View current shift details
+	"show-drafts", // () - Show draft/held orders
+	"show-history", // () - Show invoice history
+	"show-return", // () - Open return invoice dialog
+	"close-shift", // () - Close current shift
 ])
 
 /**
@@ -803,17 +803,17 @@ const emit = defineEmits([
  * ============================================================================
  */
 // Customer search state
-const customerSearch = ref("")              // Current search query
-const customerSearchContainer = ref(null)   // Ref to search container for click-outside detection
-const allCustomers = ref([])                // All customers loaded in memory for instant filtering
-const customersLoaded = ref(false)          // Flag indicating customers are ready
-const selectedIndex = ref(-1)               // Keyboard navigation index for search results
-const availableGiftCards = ref([])          // Available gift cards for current customer
-const previousCustomer = ref(null)          // Store previous customer for restore on blur
+const customerSearch = ref("") // Current search query
+const customerSearchContainer = ref(null) // Ref to search container for click-outside detection
+const allCustomers = ref([]) // All customers loaded in memory for instant filtering
+const customersLoaded = ref(false) // Flag indicating customers are ready
+const selectedIndex = ref(-1) // Keyboard navigation index for search results
+const availableGiftCards = ref([]) // Available gift cards for current customer
+const previousCustomer = ref(null) // Store previous customer for restore on blur
 
 // Edit item dialog state
-const showEditDialog = ref(false)           // Controls edit dialog visibility
-const selectedItem = ref(null)              // Item being edited
+const showEditDialog = ref(false) // Controls edit dialog visibility
+const selectedItem = ref(null) // Item being edited
 
 // UOM dropdown state - tracks which item's UOM dropdown is open (by item_code)
 const openUomDropdown = ref(null)
@@ -841,12 +841,12 @@ const openUomDropdown = ref(null)
 const customersResource = createResource({
 	url: "pos_next.api.customers.get_customers",
 	makeParams() {
-                return {
-                        search_term: "", // Empty to get all customers
-                        pos_profile: props.posProfile,
-                        limit: 0, // Get all customers
-                }
-        },
+		return {
+			search_term: "", // Empty to get all customers
+			pos_profile: props.posProfile,
+			limit: 0, // Get all customers
+		}
+	},
 	auto: false, // Don't auto-load - check offline status first
 	async onSuccess(data) {
 		const customers = data?.message || data || []
@@ -863,11 +863,11 @@ const customersResource = createResource({
 
 // Load customers from cache first (instant), then from server if online
 ;(async () => {
-        try {
-                // Always try cache first for instant load
-                const cachedCustomers = await offlineWorker.searchCachedCustomers("", 0)
-                if (cachedCustomers && cachedCustomers.length > 0) {
-                        allCustomers.value = cachedCustomers
+	try {
+		// Always try cache first for instant load
+		const cachedCustomers = await offlineWorker.searchCachedCustomers("", 0)
+		if (cachedCustomers && cachedCustomers.length > 0) {
+			allCustomers.value = cachedCustomers
 			customersLoaded.value = true
 		}
 	} catch (error) {
@@ -1181,17 +1181,17 @@ function getSmartStep(quantity) {
 	const rounded = Math.round(quantity * 10000) / 10000
 
 	// Check if it's a multiple of 0.5
-	if (Math.abs((rounded % 0.5)) < 0.0001) {
+	if (Math.abs(rounded % 0.5) < 0.0001) {
 		return 0.5
 	}
 
 	// Check if it's a multiple of 0.25
-	if (Math.abs((rounded % 0.25)) < 0.0001) {
+	if (Math.abs(rounded % 0.25) < 0.0001) {
 		return 0.25
 	}
 
 	// Check if it's a multiple of 0.1
-	if (Math.abs((rounded % 0.1)) < 0.0001) {
+	if (Math.abs(rounded % 0.1) < 0.0001) {
 		return 0.1
 	}
 
@@ -1321,7 +1321,11 @@ async function handleUpdateItem(updatedItem) {
 	// Get the original UOM from selectedItem (before any changes)
 	const originalUom = selectedItem.value?.uom || selectedItem.value?.stock_uom
 	// Use store method to update item, passing original UOM to identify correct item
-	await cartStore.updateItemDetails(updatedItem.item_code, updatedItem, originalUom)
+	await cartStore.updateItemDetails(
+		updatedItem.item_code,
+		updatedItem,
+		originalUom,
+	)
 	// Also emit for parent component compatibility
 	emit("edit-item", updatedItem)
 }

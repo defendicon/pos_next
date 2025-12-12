@@ -87,7 +87,7 @@ export const usePOSOffersStore = defineStore("posOffers", () => {
 		if (offer?.min_qty && itemCount < offer.min_qty) {
 			return {
 				eligible: false,
-				reason: __('At least {0} items required', [offer.min_qty]),
+				reason: __("At least {0} items required", [offer.min_qty]),
 			}
 		}
 
@@ -95,7 +95,7 @@ export const usePOSOffersStore = defineStore("posOffers", () => {
 		if (offer?.max_qty && itemCount > offer.max_qty) {
 			return {
 				eligible: false,
-				reason: __('Maximum {0} items allowed for this offer', [offer.max_qty]),
+				reason: __("Maximum {0} items allowed for this offer", [offer.max_qty]),
 			}
 		}
 
@@ -103,7 +103,7 @@ export const usePOSOffersStore = defineStore("posOffers", () => {
 		if (offer?.min_amt && subtotal < offer.min_amt) {
 			return {
 				eligible: false,
-				reason: __('Minimum cart value of {0} required', [offer.min_amt]),
+				reason: __("Minimum cart value of {0} required", [offer.min_amt]),
 			}
 		}
 
@@ -111,7 +111,7 @@ export const usePOSOffersStore = defineStore("posOffers", () => {
 		if (offer?.max_amt && subtotal > offer.max_amt) {
 			return {
 				eligible: false,
-				reason: __('Maximum cart value exceeded ({0})', [offer.max_amt]),
+				reason: __("Maximum cart value exceeded ({0})", [offer.max_amt]),
 			}
 		}
 

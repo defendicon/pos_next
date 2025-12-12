@@ -272,9 +272,12 @@ watch(show, async (newVal) => {
 })
 
 // Watch for prop changes (e.g., after delete or sync)
-watch(() => props.pendingInvoices, (newInvoices) => {
-	invoices.value = newInvoices
-})
+watch(
+	() => props.pendingInvoices,
+	(newInvoices) => {
+		invoices.value = newInvoices
+	},
+)
 
 async function loadInvoices() {
 	loading.value = true
@@ -299,9 +302,9 @@ function formatDate(timestamp) {
 
 	if (diffInSeconds < 60) return __("Just now")
 	if (diffInSeconds < 3600)
-		return __('{0} minutes ago', [Math.floor(diffInSeconds / 60)])
+		return __("{0} minutes ago", [Math.floor(diffInSeconds / 60)])
 	if (diffInSeconds < 86400)
-		return __('{0} hours ago', [Math.floor(diffInSeconds / 3600)])
+		return __("{0} hours ago", [Math.floor(diffInSeconds / 3600)])
 
 	return date.toLocaleDateString() + " " + date.toLocaleTimeString()
 }

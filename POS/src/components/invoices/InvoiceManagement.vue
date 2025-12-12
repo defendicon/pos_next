@@ -606,15 +606,15 @@ const showPaymentDialog = ref(false)
 const filteredUnpaidInvoices = computed(() => {
 	if (unpaidFilter.value === "partial") {
 		// Partially paid: status is 'Partly Paid' only
-		return unpaidInvoices.value.filter((inv) => inv.status === 'Partly Paid')
+		return unpaidInvoices.value.filter((inv) => inv.status === "Partly Paid")
 	}
 	if (unpaidFilter.value === "unpaid") {
 		// Totally unpaid: status is 'Unpaid'
-		return unpaidInvoices.value.filter((inv) => inv.status === 'Unpaid')
+		return unpaidInvoices.value.filter((inv) => inv.status === "Unpaid")
 	}
 	if (unpaidFilter.value === "overdue") {
 		// Overdue: invoice status is Overdue
-		return unpaidInvoices.value.filter((inv) => inv.status === 'Overdue')
+		return unpaidInvoices.value.filter((inv) => inv.status === "Overdue")
 	}
 	return unpaidInvoices.value // "all"
 })
@@ -877,17 +877,16 @@ function formatCurrency(amount) {
 function getPaymentSourceLabel(source) {
 	// Convert source to user-friendly label
 	switch (source) {
-		case 'POS':
-			return 'POS'
-		case 'POS Payment Entry':
-			return 'POS'
-		case 'Payment Entry':
-			return 'Back Office'
+		case "POS":
+			return "POS"
+		case "POS Payment Entry":
+			return "POS"
+		case "Payment Entry":
+			return "Back Office"
 		default:
 			return source
 	}
 }
-
 
 function calculateDraftTotal(items) {
 	if (!items || items.length === 0) return 0

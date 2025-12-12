@@ -40,7 +40,7 @@ export const SUPPORTED_LOCALES = {
 		nativeName: "العربية",
 		countryCode: "eg",
 		dir: "rtl",
-	}
+	},
 }
 
 /**
@@ -64,7 +64,10 @@ async function fetchLanguageFromServer() {
 
 	// Fallback to direct API call
 	try {
-		const response = await call("pos_next.api.localization.get_user_language", {})
+		const response = await call(
+			"pos_next.api.localization.get_user_language",
+			{},
+		)
 		if (response?.locale && SUPPORTED_LOCALES[response.locale]) {
 			log.info(`Fetched language from server: ${response.locale}`)
 			return response.locale
@@ -214,7 +217,9 @@ export function useLocale() {
 
 			// If server returned a different language, switch to it
 			if (serverLocale && serverLocale !== cachedLocale) {
-				log.info(`Server language (${serverLocale}) differs from cached (${cachedLocale}), switching`)
+				log.info(
+					`Server language (${serverLocale}) differs from cached (${cachedLocale}), switching`,
+				)
 				await changeLocale(serverLocale)
 			}
 		}

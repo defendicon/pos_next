@@ -172,7 +172,7 @@ export const useCustomerSearchStore = defineStore("customerSearch", () => {
 		if (/^\d+$/.test(term)) {
 			recs.push({
 				type: "phone",
-				text: __('Search by phone: {0}', [term]),
+				text: __("Search by phone: {0}", [term]),
 				icon: "📱",
 			})
 		}
@@ -181,7 +181,7 @@ export const useCustomerSearchStore = defineStore("customerSearch", () => {
 		if (term.includes("@")) {
 			recs.push({
 				type: "email",
-				text: __('Search by email: {0}', [term]),
+				text: __("Search by email: {0}", [term]),
 				icon: "✉️",
 			})
 		}
@@ -193,7 +193,7 @@ export const useCustomerSearchStore = defineStore("customerSearch", () => {
 		if (!exactMatch && filteredCustomers.value.length < 5) {
 			recs.push({
 				type: "create",
-				text: __('Create new customer: {0}', [term]),
+				text: __("Create new customer: {0}", [term]),
 				icon: "➕",
 			})
 		}
@@ -210,16 +210,11 @@ export const useCustomerSearchStore = defineStore("customerSearch", () => {
 		loading.value = true
 		try {
 			// Try to get from worker cache first
-			const cachedCustomers = await offlineWorker.searchCachedCustomers(
-				"",
-				0,
-			)
+			const cachedCustomers = await offlineWorker.searchCachedCustomers("", 0)
 
 			if (cachedCustomers && cachedCustomers.length > 0) {
 				allCustomers.value = cachedCustomers
-				console.log(
-					`✓ Loaded ${cachedCustomers.length} customers from cache`,
-				)
+				console.log(`✓ Loaded ${cachedCustomers.length} customers from cache`)
 			}
 
 			// If online, always try to fetch fresh data to ensure completeness
@@ -246,7 +241,9 @@ export const useCustomerSearchStore = defineStore("customerSearch", () => {
 				}
 			} else if (!cachedCustomers || cachedCustomers.length === 0) {
 				// Offline and cache is empty - show warning
-				console.warn("⚠️ Offline mode: No cached customers available. Please sync data when online.")
+				console.warn(
+					"⚠️ Offline mode: No cached customers available. Please sync data when online.",
+				)
 				allCustomers.value = []
 			}
 

@@ -398,8 +398,12 @@ import { logger } from "@/utils/logger"
 import { usePOSEvents } from "@/composables/usePOSEvents"
 import TranslatedHTML from "../common/TranslatedHTML.vue"
 
-const log = logger.create('POSSettings')
-const { detectSettingsChanges, updateSettingsSnapshot, emitStockSyncConfigured } = usePOSEvents()
+const log = logger.create("POSSettings")
+const {
+	detectSettingsChanges,
+	updateSettingsSnapshot,
+	emitStockSyncConfigured,
+} = usePOSEvents()
 const { showSuccess, showError } = useToast()
 
 const props = defineProps({
@@ -413,7 +417,7 @@ const emit = defineEmits(["update:modelValue", "warehouse-changed"])
 const show = ref(props.modelValue)
 
 // State
-const activeTab = ref('stock')
+const activeTab = ref("stock")
 const loading = ref(true)
 const saving = ref(false)
 const warehousesList = ref([])
@@ -445,7 +449,7 @@ const stockSyncStatus = ref({
 	itemCount: 0,
 	intervalMs: 60000,
 	lastSync: null,
-	running: false
+	running: false,
 })
 
 // Warehouse options
@@ -464,7 +468,9 @@ const warehouseSubsectionClasses = computed(() => getSubsectionClasses("gray"))
 const stockPolicySubsectionClasses = computed(() =>
 	getSubsectionClasses("blue"),
 )
-const stockSyncSubsectionClasses = computed(() => getSubsectionClasses("indigo"))
+const stockSyncSubsectionClasses = computed(() =>
+	getSubsectionClasses("indigo"),
+)
 const pricingSubsectionClasses = computed(() => getSubsectionClasses("emerald"))
 const operationsSubsectionClasses = computed(() => getSubsectionClasses("teal"))
 
@@ -550,11 +556,14 @@ watch(
 		}
 
 		// Only show feedback if value actually changed from original
-		if (originalTaxInclusive.value !== null && newValue !== originalTaxInclusive.value) {
-			const mode = newValue ? 'inclusive' : 'exclusive'
+		if (
+			originalTaxInclusive.value !== null &&
+			newValue !== originalTaxInclusive.value
+		) {
+			const mode = newValue ? "inclusive" : "exclusive"
 			log.info(`Tax mode toggled to: ${mode}`)
 		}
-	}
+	},
 )
 
 // Methods
@@ -601,13 +610,16 @@ async function saveSettings() {
 	saving.value = true
 	const oldWarehouse = props.currentWarehouse
 	const warehouseChanged = selectedWarehouse.value !== oldWarehouse
-	const negativeStockChanged = originalAllowNegativeStock.value !== settings.value.allow_negative_stock
-	const taxInclusiveChanged = originalTaxInclusive.value !== null && originalTaxInclusive.value !== settings.value.tax_inclusive
+	const negativeStockChanged =
+		originalAllowNegativeStock.value !== settings.value.allow_negative_stock
+	const taxInclusiveChanged =
+		originalTaxInclusive.value !== null &&
+		originalTaxInclusive.value !== settings.value.tax_inclusive
 
 	// Capture old settings for change detection
 	const oldSettings = {
 		...settings.value,
-		warehouse: oldWarehouse // Include warehouse in change detection
+		warehouse: oldWarehouse, // Include warehouse in change detection
 	}
 
 	try {
@@ -669,13 +681,21 @@ async function saveSettings() {
 		// Show success toast for other changes
 		let successMessage = __("Settings saved successfully")
 		if (warehouseChanged && taxInclusiveChanged) {
-			successMessage = __("Settings saved, warehouse updated, and tax mode changed. Cart will be recalculated.")
+			successMessage = __(
+				"Settings saved, warehouse updated, and tax mode changed. Cart will be recalculated.",
+			)
 		} else if (warehouseChanged) {
-			successMessage = __("Settings saved and warehouse updated. Reloading stock...")
+			successMessage = __(
+				"Settings saved and warehouse updated. Reloading stock...",
+			)
 		} else if (taxInclusiveChanged) {
 			successMessage = settings.value.tax_inclusive
-				? __('Settings saved. Tax mode is now "inclusive". Cart will be recalculated.')
-				: __('Settings saved. Tax mode is now "exclusive". Cart will be recalculated.')
+				? __(
+						'Settings saved. Tax mode is now "inclusive". Cart will be recalculated.',
+					)
+				: __(
+						'Settings saved. Tax mode is now "exclusive". Cart will be recalculated.',
+					)
 		}
 
 		showSuccess(successMessage)
@@ -694,26 +714,29 @@ async function saveSettings() {
 // Load stock sync settings from localStorage
 function loadStockSyncSettings() {
 	try {
-		const saved = localStorage.getItem('pos_stock_sync_settings')
+		const saved = localStorage.getItem("pos_stock_sync_settings")
 		if (saved) {
 			const parsed = JSON.parse(saved)
 			stockSyncEnabled.value = parsed.enabled ?? false
 			stockSyncIntervalSeconds.value = parsed.intervalSeconds ?? 60
 		}
 	} catch (error) {
-		log.error('Failed to load stock sync settings:', error)
+		log.error("Failed to load stock sync settings:", error)
 	}
 }
 
 // Save stock sync settings to localStorage
 function saveStockSyncSettings() {
 	try {
-		localStorage.setItem('pos_stock_sync_settings', JSON.stringify({
-			enabled: stockSyncEnabled.value,
-			intervalSeconds: stockSyncIntervalSeconds.value
-		}))
+		localStorage.setItem(
+			"pos_stock_sync_settings",
+			JSON.stringify({
+				enabled: stockSyncEnabled.value,
+				intervalSeconds: stockSyncIntervalSeconds.value,
+			}),
+		)
 	} catch (error) {
-		log.error('Failed to save stock sync settings:', error)
+		log.error("Failed to save stock sync settings:", error)
 	}
 }
 
@@ -723,7 +746,7 @@ async function updateStockSyncStatus() {
 		const status = await offlineWorker.getStockSyncStatus()
 		stockSyncStatus.value = status
 	} catch (error) {
-		log.error('Failed to get stock sync status:', error)
+		log.error("Failed to get stock sync status:", error)
 	}
 }
 
@@ -735,7 +758,7 @@ async function applyStockSyncConfig() {
 		if (stockSyncEnabled.value) {
 			// Configure and start sync
 			await offlineWorker.configureStockSync({
-				intervalMs
+				intervalMs,
 			})
 			await offlineWorker.startStockSync()
 		} else {
@@ -752,24 +775,24 @@ async function applyStockSyncConfig() {
 		// Emit sync configuration change event
 		emitStockSyncConfigured({
 			enabled: stockSyncEnabled.value,
-			intervalMs: intervalMs
+			intervalMs: intervalMs,
 		})
 	} catch (error) {
-		log.error('Failed to apply stock sync config:', error)
+		log.error("Failed to apply stock sync config:", error)
 	}
 }
 
 // Format sync time for display
 function formatSyncTime(timestamp) {
-	if (!timestamp) return __('Never')
+	if (!timestamp) return __("Never")
 
 	const now = Date.now()
 	const diff = now - timestamp
 
 	if (diff < 60000) {
-		return __('{0}s ago', [Math.floor(diff / 1000)])
+		return __("{0}s ago", [Math.floor(diff / 1000)])
 	} else if (diff < 3600000) {
-		return __('{0}m ago', [Math.floor(diff / 60000)])
+		return __("{0}m ago", [Math.floor(diff / 60000)])
 	} else {
 		const date = new Date(timestamp)
 		return date.toLocaleTimeString()

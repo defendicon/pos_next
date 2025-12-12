@@ -27,7 +27,7 @@ import { offlineWorker } from "@/utils/offline/workerClient"
 import { defineStore } from "pinia"
 import { computed, ref } from "vue"
 
-const log = logger.create('POSSync')
+const log = logger.create("POSSync")
 
 export const usePOSSyncStore = defineStore("posSync", () => {
 	// =========================================================================
@@ -71,15 +71,16 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 
 		// Update reactive state
 		isOffline.value = nowOffline
-		connectionQuality.value = state.quality || offlineState.getConnectionQuality()
+		connectionQuality.value =
+			state.quality || offlineState.getConnectionQuality()
 
 		// Auto-sync when transitioning from offline to online
 		if (wasOffline && !nowOffline) {
-			log.info('Transition to online detected, auto-syncing pending invoices')
+			log.info("Transition to online detected, auto-syncing pending invoices")
 			try {
 				await syncPending()
 			} catch (error) {
-				log.error('Auto-sync failed on reconnection', error)
+				log.error("Auto-sync failed on reconnection", error)
 			}
 		}
 
@@ -104,7 +105,7 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 		try {
 			pendingInvoicesCount.value = await offlineWorker.getOfflineInvoiceCount()
 		} catch (error) {
-			log.error('Failed to get pending invoice count', error)
+			log.error("Failed to get pending invoice count", error)
 		}
 	}
 
@@ -123,7 +124,7 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 			await updatePendingCount()
 			return result
 		} catch (error) {
-			log.error('Failed to sync invoices', error)
+			log.error("Failed to sync invoices", error)
 			throw error
 		} finally {
 			isSyncing.value = false
@@ -161,7 +162,7 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 			}
 			return true
 		} catch (error) {
-			log.error('Failed to cache data', error)
+			log.error("Failed to cache data", error)
 			return false
 		}
 	}
@@ -178,10 +179,10 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 		try {
 			await offlineWorker.saveOfflineInvoice(invoiceData)
 			await updatePendingCount()
-			log.info('Invoice saved offline successfully')
+			log.info("Invoice saved offline successfully")
 			return true
 		} catch (error) {
-			log.error('Failed to save invoice offline', error)
+			log.error("Failed to save invoice offline", error)
 			throw error
 		}
 	}
@@ -193,7 +194,7 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 		try {
 			pendingInvoicesList.value = await getPending()
 		} catch (error) {
-			log.error('Failed to load pending invoices', error)
+			log.error("Failed to load pending invoices", error)
 			pendingInvoicesList.value = []
 		}
 	}
@@ -208,7 +209,7 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 			await loadPendingInvoices()
 			showSuccess(__("Offline invoice deleted successfully"))
 		} catch (error) {
-			log.error('Failed to delete offline invoice', error)
+			log.error("Failed to delete offline invoice", error)
 			showError(error.message || __("Failed to delete offline invoice"))
 			throw error
 		}
@@ -228,13 +229,13 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 			const result = await syncPending()
 
 			if (result.success > 0) {
-				showSuccess(__('{0} invoice(s) synced successfully', [result.success]))
+				showSuccess(__("{0} invoice(s) synced successfully", [result.success]))
 				await loadPendingInvoices()
 			}
 
 			return result
 		} catch (error) {
-			log.error('Sync all pending failed', error)
+			log.error("Sync all pending failed", error)
 			throw error
 		}
 	}
@@ -251,23 +252,28 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 		try {
 			const cacheReady = await checkCacheReady()
 			const stats = await getCacheStats()
-			const needsRefresh = !stats.lastSync || Date.now() - stats.lastSync > 24 * 60 * 60 * 1000
+			const needsRefresh =
+				!stats.lastSync || Date.now() - stats.lastSync > 24 * 60 * 60 * 1000
 
 			// Always load payment methods for reliable offline support
-			log.info('Loading payment methods for offline use')
+			log.info("Loading payment methods for offline use")
 			try {
-				const paymentMethodsData = await cachePaymentMethodsFromServer(currentProfile.name)
+				const paymentMethodsData = await cachePaymentMethodsFromServer(
+					currentProfile.name,
+				)
 
 				if (paymentMethodsData.payment_methods?.length > 0) {
-					const methodsWithProfile = paymentMethodsData.payment_methods.map((method) => ({
-						...method,
-						pos_profile: currentProfile.name,
-					}))
+					const methodsWithProfile = paymentMethodsData.payment_methods.map(
+						(method) => ({
+							...method,
+							pos_profile: currentProfile.name,
+						}),
+					)
 					await offlineWorker.cachePaymentMethods(methodsWithProfile)
 					log.success(`Cached ${methodsWithProfile.length} payment methods`)
 				}
 			} catch (error) {
-				log.error('Failed to load payment methods', error)
+				log.error("Failed to load payment methods", error)
 				// Continue with other data loading
 			}
 
@@ -277,10 +283,12 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 
 				// Load customers
 				try {
-					const customersData = await cacheCustomersFromServer(currentProfile.name)
+					const customersData = await cacheCustomersFromServer(
+						currentProfile.name,
+					)
 					await cacheData([], customersData.customers || [])
 				} catch (e) {
-					log.error('Failed to cache customers', e)
+					log.error("Failed to cache customers", e)
 				}
 
 				// Load items
@@ -288,13 +296,13 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 					const itemsData = await cacheItemsFromServer(currentProfile.name)
 					await cacheData(itemsData.items || [], [])
 				} catch (e) {
-					log.error('Failed to cache items', e)
+					log.error("Failed to cache items", e)
 				}
 
 				showSuccess(__("Data is ready for offline use"))
 			}
 		} catch (error) {
-			log.error('Failed to preload offline data', error)
+			log.error("Failed to preload offline data", error)
 			showWarning(__("Some data may not be available offline"))
 		}
 	}
@@ -320,7 +328,9 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 				// Clear existing cache to ensure freshness (optional, but cleaner)
 				// await offlineWorker.clearItemsCache()
 
-				const customersData = await cacheCustomersFromServer(currentProfile.name)
+				const customersData = await cacheCustomersFromServer(
+					currentProfile.name,
+				)
 				await cacheData([], customersData.customers || [])
 
 				const itemsData = await cacheItemsFromServer(currentProfile.name)
@@ -329,7 +339,7 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 				showSuccess(__("Offline data refreshed successfully"))
 			}
 		} catch (error) {
-			log.error('Manual sync failed', error)
+			log.error("Manual sync failed", error)
 			showError(__("Sync failed: {0}", [error.message]))
 		} finally {
 			isSyncing.value = false
@@ -343,7 +353,9 @@ export const usePOSSyncStore = defineStore("posSync", () => {
 	async function checkOfflineCacheAvailability() {
 		const cacheReady = await checkCacheReady()
 		if (!cacheReady && isOffline.value) {
-			showWarning(__("POS is offline without cached data. Please connect to sync."))
+			showWarning(
+				__("POS is offline without cached data. Please connect to sync."),
+			)
 		}
 		return cacheReady
 	}

@@ -127,7 +127,8 @@ export function useInvoice() {
 		() => _cachedTotalDiscount.value + (additionalDiscount.value || 0),
 	)
 	const grandTotal = computed(() => {
-		const discount = _cachedTotalDiscount.value + (additionalDiscount.value || 0)
+		const discount =
+			_cachedTotalDiscount.value + (additionalDiscount.value || 0)
 
 		if (taxInclusive.value) {
 			// Tax inclusive: Subtotal already includes tax, so don't add it again
@@ -167,12 +168,12 @@ export function useInvoice() {
 			// For serial items, merge the serial numbers
 			if (existingItem.has_serial_no && item.serial_no) {
 				const existingSerials = existingItem.serial_no
-					? existingItem.serial_no.split('\n').filter(s => s.trim())
+					? existingItem.serial_no.split("\n").filter((s) => s.trim())
 					: []
-				const newSerials = item.serial_no.split('\n').filter(s => s.trim())
+				const newSerials = item.serial_no.split("\n").filter((s) => s.trim())
 				// Combine serials (avoid duplicates)
 				const allSerials = [...new Set([...existingSerials, ...newSerials])]
-				existingItem.serial_no = allSerials.join('\n')
+				existingItem.serial_no = allSerials.join("\n")
 				// For serial items, quantity must match serial count
 				existingItem.quantity = allSerials.length
 			} else {
@@ -183,8 +184,7 @@ export function useInvoice() {
 			// Update cache incrementally (new values - old values)
 			// Use price_list_rate for subtotal (before discount)
 			const priceListRate = existingItem.price_list_rate || existingItem.rate
-			_cachedSubtotal.value +=
-				existingItem.quantity * priceListRate - oldAmount
+			_cachedSubtotal.value += existingItem.quantity * priceListRate - oldAmount
 			_cachedTotalTax.value += (existingItem.tax_amount || 0) - oldTax
 			_cachedTotalDiscount.value +=
 				(existingItem.discount_amount || 0) - oldDiscount
@@ -301,7 +301,7 @@ export function useInvoice() {
 
 			// Handle serial number items - adjust serials when quantity changes
 			if (item.has_serial_no && item.serial_no) {
-				const serialList = item.serial_no.split('\n').filter(s => s.trim())
+				const serialList = item.serial_no.split("\n").filter((s) => s.trim())
 
 				if (newQuantity < oldQuantity) {
 					// Quantity decreased - return excess serials to cache
@@ -310,7 +310,7 @@ export function useInvoice() {
 
 					if (serialsToReturn.length > 0) {
 						serialStore.returnSerials(itemCode, serialsToReturn)
-						item.serial_no = serialsToKeep.join('\n')
+						item.serial_no = serialsToKeep.join("\n")
 					}
 				}
 				// Note: Increasing quantity for serial items requires selecting new serials
@@ -577,8 +577,8 @@ export function useInvoice() {
 
 		// Update item fields
 		item.tax_amount = taxAmount
-		item.rate = priceListRate  // Preserve original price for display
-		item.amount = netAmount    // Net amount for backend calculations
+		item.rate = priceListRate // Preserve original price for display
+		item.amount = netAmount // Net amount for backend calculations
 	}
 
 	function addPayment(payment) {
@@ -667,8 +667,11 @@ export function useInvoice() {
 				//   ERPNext will extract net amount based on included_in_print_rate flag
 				// Tax-exclusive mode: Send net amount (after discount, before tax addition)
 				rate: taxInclusive.value
-					? ((item.price_list_rate || item.rate) - (item.discount_amount || 0) / (item.quantity || 1))
-					: (item.quantity > 0 ? item.amount / item.quantity : item.rate),
+					? (item.price_list_rate || item.rate) -
+						(item.discount_amount || 0) / (item.quantity || 1)
+					: item.quantity > 0
+						? item.amount / item.quantity
+						: item.rate,
 				price_list_rate: item.price_list_rate || item.rate,
 				uom: item.uom,
 				warehouse: item.warehouse,
@@ -722,8 +725,11 @@ export function useInvoice() {
 					//   ERPNext will extract net amount based on included_in_print_rate flag
 					// Tax-exclusive mode: Send net amount (after discount, before tax addition)
 					rate: taxInclusive.value
-						? ((item.price_list_rate || item.rate) - (item.discount_amount || 0) / (item.quantity || 1))
-						: (item.quantity > 0 ? item.amount / item.quantity : item.rate),
+						? (item.price_list_rate || item.rate) -
+							(item.discount_amount || 0) / (item.quantity || 1)
+						: item.quantity > 0
+							? item.amount / item.quantity
+							: item.rate,
 					price_list_rate: item.price_list_rate || item.rate,
 					uom: item.uom,
 					warehouse: item.warehouse,

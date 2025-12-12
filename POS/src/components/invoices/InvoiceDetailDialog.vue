@@ -266,7 +266,7 @@ import { logger } from "@/utils/logger"
 import { Button, Dialog, call } from "frappe-ui"
 import { ref, watch, nextTick, computed } from "vue"
 
-const log = logger.create('InvoiceDetailDialog')
+const log = logger.create("InvoiceDetailDialog")
 const { formatDate, formatTime } = useFormatters()
 
 const props = defineProps({
@@ -292,19 +292,32 @@ const invoiceData = ref(null)
 // Computed: Check if this is a credit sale (Pay on Account - no payments, full outstanding)
 const isCreditSale = computed(() => {
 	if (!invoiceData.value) return false
-	const hasNoPayments = !invoiceData.value.payments || invoiceData.value.payments.length === 0
-	const totalPaid = invoiceData.value.payments?.reduce((sum, p) => sum + Math.abs(p.amount || 0), 0) || 0
+	const hasNoPayments =
+		!invoiceData.value.payments || invoiceData.value.payments.length === 0
+	const totalPaid =
+		invoiceData.value.payments?.reduce(
+			(sum, p) => sum + Math.abs(p.amount || 0),
+			0,
+		) || 0
 	const grandTotal = Math.abs(invoiceData.value.grand_total || 0)
 	const outstanding = Math.abs(invoiceData.value.outstanding_amount || 0)
 	// Credit sale if no payments and outstanding equals grand total
-	return hasNoPayments || (totalPaid < 0.01 && Math.abs(outstanding - grandTotal) < 0.01)
+	return (
+		hasNoPayments ||
+		(totalPaid < 0.01 && Math.abs(outstanding - grandTotal) < 0.01)
+	)
 })
 
 // Computed: Check if this is a credit sale return (return with no payments)
 const isCreditSaleReturn = computed(() => {
 	if (!invoiceData.value || !invoiceData.value.is_return) return false
-	const hasNoPayments = !invoiceData.value.payments || invoiceData.value.payments.length === 0
-	const totalPaid = invoiceData.value.payments?.reduce((sum, p) => sum + Math.abs(p.amount || 0), 0) || 0
+	const hasNoPayments =
+		!invoiceData.value.payments || invoiceData.value.payments.length === 0
+	const totalPaid =
+		invoiceData.value.payments?.reduce(
+			(sum, p) => sum + Math.abs(p.amount || 0),
+			0,
+		) || 0
 	return hasNoPayments || totalPaid < 0.01
 })
 
@@ -326,11 +339,13 @@ watch(show, async (val) => {
 	} else {
 		// Ensure dialog appears above other dialogs
 		await nextTick()
-		const dialogs = document.querySelectorAll('.modal-container, .modal-backdrop')
-		dialogs.forEach(dialog => {
+		const dialogs = document.querySelectorAll(
+			".modal-container, .modal-backdrop",
+		)
+		dialogs.forEach((dialog) => {
 			const title = dialog.querySelector('[class*="title"]')
-			if (title && title.textContent?.includes('Invoice Details')) {
-				dialog.style.zIndex = '400'
+			if (title && title.textContent?.includes("Invoice Details")) {
+				dialog.style.zIndex = "400"
 			}
 		})
 	}

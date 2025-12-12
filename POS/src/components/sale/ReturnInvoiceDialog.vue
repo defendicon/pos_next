@@ -667,7 +667,9 @@ const fetchInvoiceResource = createResource({
 			const availableItems = data.items.filter((item) => item.qty > 0)
 
 			if (availableItems.length === 0) {
-				showWarning(__("All items from this invoice have already been returned"))
+				showWarning(
+					__("All items from this invoice have already been returned"),
+				)
 				originalInvoice.value = null
 				returnItems.value = []
 				return
@@ -685,7 +687,8 @@ const fetchInvoiceResource = createResource({
 			returnItems.value.forEach(normalizeItemQty)
 
 			// Track payment amounts from original invoice
-			const totalPaidFromPayments = data.payments?.reduce((sum, p) => sum + Math.abs(p.amount || 0), 0) || 0
+			const totalPaidFromPayments =
+				data.payments?.reduce((sum, p) => sum + Math.abs(p.amount || 0), 0) || 0
 			originalPaidAmount.value = data.paid_amount || totalPaidFromPayments || 0
 			originalOutstandingAmount.value = data.outstanding_amount || 0
 
@@ -694,11 +697,14 @@ const fetchInvoiceResource = createResource({
 			// 1. No payments in the payments array, OR
 			// 2. Outstanding amount equals grand total (nothing was paid)
 			const hasNoPayments = !data.payments || data.payments.length === 0
-			const isFullyUnpaid = Math.abs(data.outstanding_amount - data.grand_total) < 0.01
-			isOriginalCreditSale.value = hasNoPayments || (totalPaidFromPayments < 0.01 && isFullyUnpaid)
+			const isFullyUnpaid =
+				Math.abs(data.outstanding_amount - data.grand_total) < 0.01
+			isOriginalCreditSale.value =
+				hasNoPayments || (totalPaidFromPayments < 0.01 && isFullyUnpaid)
 
 			// Detect if invoice was partially paid (has both paid amount and outstanding)
-			isPartiallyPaid.value = originalPaidAmount.value > 0 && originalOutstandingAmount.value > 0
+			isPartiallyPaid.value =
+				originalPaidAmount.value > 0 && originalOutstandingAmount.value > 0
 
 			// Load payment methods if not already loaded
 			if (paymentMethods.value.length === 0 && props.posProfile) {
@@ -740,12 +746,13 @@ const createReturnResource = createResource({
 				// Link to original invoice item for proper return tracking
 				sales_invoice_item: item.name, // Reference to the original Sales Invoice Item
 			})),
-			payments: refundPayments.value.map(payment => ({
+			payments: refundPayments.value.map((payment) => ({
 				mode_of_payment: payment.mode_of_payment,
 				amount: -Math.abs(payment.amount), // Negative for refunds
 			})),
 			remarks:
-				returnReason.value || __('Return against {0}', [originalInvoice.value.name]),
+				returnReason.value ||
+				__("Return against {0}", [originalInvoice.value.name]),
 		}
 
 		// Return in the correct format: invoice as JSON string
@@ -772,7 +779,7 @@ const createReturnResource = createResource({
 
 		// Close return modal and go back to invoice list
 		closeReturnModal()
-		showSuccess(__('Return invoice {0} created successfully', [data.name]))
+		showSuccess(__("Return invoice {0} created successfully", [data.name]))
 	},
 	onError(error) {
 		isSubmitting.value = false
@@ -788,11 +795,11 @@ onMounted(() => {
 	if (props.posProfile) {
 		loadPaymentMethodsResource.reload()
 	}
-	document.addEventListener('keydown', handleKeyboardShortcuts)
+	document.addEventListener("keydown", handleKeyboardShortcuts)
 })
 
 onUnmounted(() => {
-	document.removeEventListener('keydown', handleKeyboardShortcuts)
+	document.removeEventListener("keydown", handleKeyboardShortcuts)
 })
 
 // Watchers
@@ -858,13 +865,22 @@ const creditAdjustmentAmount = computed(() => {
 })
 
 // Summary display values - shows breakdown for partially paid, simple for others
-const showPartialBreakdown = computed(() => isPartiallyPaid.value && !isOriginalCreditSale.value)
-const summaryRefundLabel = computed(() => showPartialBreakdown.value ? 'Cash Refund:' : 'Refund Amount:')
-const summaryRefundAmount = computed(() => showPartialBreakdown.value ? maxRefundableAmount.value : returnTotal.value)
+const showPartialBreakdown = computed(
+	() => isPartiallyPaid.value && !isOriginalCreditSale.value,
+)
+const summaryRefundLabel = computed(() =>
+	showPartialBreakdown.value ? "Cash Refund:" : "Refund Amount:",
+)
+const summaryRefundAmount = computed(() =>
+	showPartialBreakdown.value ? maxRefundableAmount.value : returnTotal.value,
+)
 
 // RTL-aware style for payment select dropdown
 const paymentSelectStyle = computed(() => ({
-	backgroundPosition: document.documentElement.dir === 'rtl' ? 'left 12px center' : 'right 12px center'
+	backgroundPosition:
+		document.documentElement.dir === "rtl"
+			? "left 12px center"
+			: "right 12px center",
 }))
 
 const totalPaymentAmount = computed(() => {
@@ -893,8 +909,11 @@ const canCreateReturn = computed(() => {
 		if (!refundPayments.value || refundPayments.value.length === 0) {
 			return hasSelectedItems // Allow if no refund needed (all credit adjustment)
 		}
-		const hasValidPayments = refundPayments.value.every(p => p.mode_of_payment && p.amount >= 0)
-		const paymentsMatchRefundable = Math.abs(totalPaymentAmount.value - maxRefundableAmount.value) < 0.01
+		const hasValidPayments = refundPayments.value.every(
+			(p) => p.mode_of_payment && p.amount >= 0,
+		)
+		const paymentsMatchRefundable =
+			Math.abs(totalPaymentAmount.value - maxRefundableAmount.value) < 0.01
 		return hasSelectedItems && hasValidPayments && paymentsMatchRefundable
 	}
 
@@ -902,9 +921,11 @@ const canCreateReturn = computed(() => {
 	if (!refundPayments.value) {
 		return false
 	}
-	const hasValidPayments = refundPayments.value.length > 0 &&
-		refundPayments.value.every(p => p.mode_of_payment && p.amount > 0)
-	const paymentsMatch = Math.abs(totalPaymentAmount.value - returnTotal.value) < 0.01
+	const hasValidPayments =
+		refundPayments.value.length > 0 &&
+		refundPayments.value.every((p) => p.mode_of_payment && p.amount > 0)
+	const paymentsMatch =
+		Math.abs(totalPaymentAmount.value - returnTotal.value) < 0.01
 
 	return hasSelectedItems && hasValidPayments && paymentsMatch
 })
@@ -936,14 +957,18 @@ watch(returnTotal, (newTotal) => {
 	}
 
 	// Safety checks: ensure refundPayments exists and has exactly one row
-	if (refundPayments.value &&
+	if (
+		refundPayments.value &&
 		Array.isArray(refundPayments.value) &&
 		refundPayments.value.length === 1 &&
 		refundPayments.value[0] &&
-		newTotal > 0) {
+		newTotal > 0
+	) {
 		// For partially paid invoices, set the proportional refundable amount
 		if (isPartiallyPaid.value) {
-			refundPayments.value[0].amount = Number(maxRefundableAmount.value.toFixed(2))
+			refundPayments.value[0].amount = Number(
+				maxRefundableAmount.value.toFixed(2),
+			)
 		} else {
 			refundPayments.value[0].amount = newTotal
 		}
@@ -1032,12 +1057,13 @@ function validateSelectedItems() {
 	}
 	invalidItems.forEach(normalizeItemQty)
 	const details = invalidItems
-		.map((item) => __('{0}: maximum {1}', [
-			(item.item_name || item.item_code),
-			item.quantity
-		]))
+		.map((item) =>
+			__("{0}: maximum {1}", [item.item_name || item.item_code, item.quantity]),
+		)
 		.join("\n")
-	const message = __('Adjust return quantities before submitting.\n\n{0}', [details])
+	const message = __("Adjust return quantities before submitting.\n\n{0}", [
+		details,
+	])
 	submitError.value = message
 	openErrorDialog(message)
 	return false
@@ -1046,7 +1072,7 @@ function validateSelectedItems() {
 function addPaymentRow() {
 	refundPayments.value.push({
 		mode_of_payment: "",
-		amount: 0
+		amount: 0,
 	})
 }
 
@@ -1064,19 +1090,28 @@ function initializePaymentsFromInvoice() {
 	}
 
 	// Initialize refund payments from original invoice payments
-	if (originalInvoice.value && originalInvoice.value.payments && originalInvoice.value.payments.length > 0) {
+	if (
+		originalInvoice.value &&
+		originalInvoice.value.payments &&
+		originalInvoice.value.payments.length > 0
+	) {
 		// For partially paid invoices, we'll set the amount to 0 initially
 		// It will be updated by the watcher when returnTotal changes
-		refundPayments.value = originalInvoice.value.payments.map(payment => ({
+		refundPayments.value = originalInvoice.value.payments.map((payment) => ({
 			mode_of_payment: payment.mode_of_payment,
-			amount: isPartiallyPaid.value ? 0 : Math.abs(payment.amount)
+			amount: isPartiallyPaid.value ? 0 : Math.abs(payment.amount),
 		}))
 	} else {
 		// Default to one empty row if no payments in invoice
-		refundPayments.value = [{
-			mode_of_payment: paymentMethods.value.length > 0 ? paymentMethods.value[0].mode_of_payment : "",
-			amount: 0
-		}]
+		refundPayments.value = [
+			{
+				mode_of_payment:
+					paymentMethods.value.length > 0
+						? paymentMethods.value[0].mode_of_payment
+						: "",
+				amount: 0,
+			},
+		]
 	}
 }
 
@@ -1128,13 +1163,13 @@ function handleKeyboardShortcuts(e) {
 	if (!returnModal.visible) return
 
 	// Ctrl+A or Cmd+A: Select all items
-	if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+	if ((e.ctrlKey || e.metaKey) && e.key === "a") {
 		e.preventDefault()
 		selectAllItems()
 	}
 
 	// Ctrl+Enter or Cmd+Enter: Submit if valid
-	if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+	if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
 		e.preventDefault()
 		if (canCreateReturn.value && !isSubmitting.value) {
 			handleCreateReturn()
@@ -1142,7 +1177,7 @@ function handleKeyboardShortcuts(e) {
 	}
 
 	// Escape: Close modal
-	if (e.key === 'Escape') {
+	if (e.key === "Escape") {
 		closeReturnModal()
 	}
 }

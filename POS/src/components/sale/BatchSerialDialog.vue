@@ -286,7 +286,7 @@ const filteredSerials = computed(() => {
 	}
 	const query = serialSearchQuery.value.toLowerCase().trim()
 	return availableSerials.value.filter((serial) =>
-		serial.serial_no.toLowerCase().includes(query)
+		serial.serial_no.toLowerCase().includes(query),
 	)
 })
 

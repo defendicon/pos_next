@@ -560,7 +560,14 @@ import AutocompleteSelect from "@/components/common/AutocompleteSelect.vue"
 import { useToast } from "@/composables/useToast"
 import { useCustomerSearchStore } from "@/stores/customerSearch"
 import { usePOSSettingsStore } from "@/stores/posSettings"
-import { Badge, Button, Card, FormControl, LoadingIndicator, createResource } from "frappe-ui"
+import {
+	Badge,
+	Button,
+	Card,
+	FormControl,
+	LoadingIndicator,
+	createResource,
+} from "frappe-ui"
 import { FeatherIcon } from "frappe-ui"
 import { storeToRefs } from "pinia"
 import { computed, onMounted, ref, watch } from "vue"
@@ -568,7 +575,8 @@ import TranslatedHTML from "../common/TranslatedHTML.vue"
 
 const { showSuccess, showError, showWarning } = useToast()
 const customerStore = useCustomerSearchStore()
-const { filteredCustomers, loading: customerLoading } = storeToRefs(customerStore)
+const { filteredCustomers, loading: customerLoading } =
+	storeToRefs(customerStore)
 const posSettingsStore = usePOSSettingsStore()
 
 const props = defineProps({
@@ -631,10 +639,11 @@ const filteredCoupons = computed(() => {
 	// Filter by search query
 	if (searchQuery.value) {
 		const term = searchQuery.value.toLowerCase()
-		filtered = filtered.filter((c) =>
-			c.coupon_code?.toLowerCase().includes(term) ||
-			c.coupon_name?.toLowerCase().includes(term) ||
-			c.customer_name?.toLowerCase().includes(term)
+		filtered = filtered.filter(
+			(c) =>
+				c.coupon_code?.toLowerCase().includes(term) ||
+				c.coupon_name?.toLowerCase().includes(term) ||
+				c.customer_name?.toLowerCase().includes(term),
 		)
 	}
 
@@ -657,7 +666,7 @@ const filteredCoupons = computed(() => {
 const campaignOptions = computed(() => {
 	return [
 		{ label: __("-- No Campaign --"), value: "" },
-		...campaigns.value.map(c => ({ label: c.name, value: c.name }))
+		...campaigns.value.map((c) => ({ label: c.name, value: c.name })),
 	]
 })
 
@@ -685,7 +694,7 @@ const couponsResource = createResource({
 	},
 	onError(error) {
 		loading.value = false
-		handleError(error, __('Failed to load coupons'))
+		handleError(error, __("Failed to load coupons"))
 	},
 })
 
@@ -702,7 +711,7 @@ const couponDetailsResource = createResource({
 	},
 	onError(error) {
 		loading.value = false
-		handleError(error, __('Failed to load coupon details'))
+		handleError(error, __("Failed to load coupon details"))
 	},
 })
 
@@ -785,7 +794,9 @@ const toggleCouponResource = createResource({
 	onSuccess(data) {
 		loading.value = false
 		const responseData = data?.message || data
-		showSuccess(responseData?.message || __("Coupon status updated successfully"))
+		showSuccess(
+			responseData?.message || __("Coupon status updated successfully"),
+		)
 		loadCoupons()
 		// Reload details to get updated disabled status
 		if (selectedCoupon.value) {
@@ -820,12 +831,15 @@ const deleteCouponResource = createResource({
 })
 
 // Watchers
-watch(() => selectedCoupon.value, (val) => {
-	if (val && !isCreating.value) {
-		loading.value = true
-		couponDetailsResource.reload()
-	}
-})
+watch(
+	() => selectedCoupon.value,
+	(val) => {
+		if (val && !isCreating.value) {
+			loading.value = true
+			couponDetailsResource.reload()
+		}
+	},
+)
 
 onMounted(() => {
 	loadCoupons()
@@ -877,7 +891,11 @@ function handleSubmit() {
 		return
 	}
 	if (form.value.discount_type === "Percentage") {
-		if (!form.value.discount_percentage || form.value.discount_percentage <= 0 || form.value.discount_percentage > 100) {
+		if (
+			!form.value.discount_percentage ||
+			form.value.discount_percentage <= 0 ||
+			form.value.discount_percentage > 100
+		) {
 			showWarning(__("Please enter a valid discount percentage (1-100)"))
 			return
 		}
@@ -908,7 +926,11 @@ function handleToggle() {
 
 function handleDelete() {
 	if (selectedCoupon.value.used > 0) {
-		showWarning(__('Cannot delete coupon as it has been used {0} times', [selectedCoupon.value.used]))
+		showWarning(
+			__("Cannot delete coupon as it has been used {0} times", [
+				selectedCoupon.value.used,
+			]),
+		)
 		return
 	}
 	showDeleteConfirm.value = true
@@ -952,14 +974,14 @@ function resetForm() {
 function populateFormFromCoupon(coupon) {
 	form.value = {
 		coupon_name: coupon.coupon_name || "",
-		coupon_type: coupon.coupon_type || __('Promotional'),
+		coupon_type: coupon.coupon_type || __("Promotional"),
 		coupon_code: coupon.coupon_code || "",
-		discount_type: coupon.discount_type || __('Percentage'),
+		discount_type: coupon.discount_type || __("Percentage"),
 		discount_percentage: coupon.discount_percentage || null,
 		discount_amount: coupon.discount_amount || null,
 		min_amount: coupon.min_amount || null,
 		max_amount: coupon.max_amount || null,
-		apply_on: coupon.apply_on || __('Grand Total'),
+		apply_on: coupon.apply_on || __("Grand Total"),
 		customer: coupon.customer || "",
 		campaign: coupon.campaign || "",
 		valid_from: coupon.valid_from || "",
@@ -1009,7 +1031,10 @@ function parseErrorMessage(error) {
 		if (error._server_messages) {
 			const messages = JSON.parse(error._server_messages)
 			if (Array.isArray(messages) && messages.length > 0) {
-				const firstMessage = typeof messages[0] === "string" ? JSON.parse(messages[0]) : messages[0]
+				const firstMessage =
+					typeof messages[0] === "string"
+						? JSON.parse(messages[0])
+						: messages[0]
 				return firstMessage.message || error.message || __("An error occurred")
 			}
 		}

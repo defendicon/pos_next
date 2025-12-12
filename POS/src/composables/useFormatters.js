@@ -24,7 +24,7 @@ function formatQuantity(quantity) {
 	const num = Number.parseFloat(quantity)
 	if (isNaN(num)) return "0"
 	// Round to 4 decimal places and remove trailing zeros
-	return num.toFixed(4).replace(/\.?0+$/, '')
+	return num.toFixed(4).replace(/\.?0+$/, "")
 }
 
 /**
@@ -47,7 +47,7 @@ function formatTime(time) {
 	if (!time) return ""
 
 	// If it's a time string (contains colon), extract HH:MM
-	if (typeof time === 'string' && time.includes(':')) {
+	if (typeof time === "string" && time.includes(":")) {
 		const parts = time.split(":")
 		if (parts.length >= 2) {
 			return `${parts[0]}:${parts[1]}`
@@ -69,10 +69,10 @@ function formatTime(time) {
  */
 function formatDate(date) {
 	if (!date) return ""
-	return new Date(date).toLocaleDateString('en-GB', {
-		day: '2-digit',
-		month: '2-digit',
-		year: '2-digit'
+	return new Date(date).toLocaleDateString("en-GB", {
+		day: "2-digit",
+		month: "2-digit",
+		year: "2-digit",
 	})
 }
 
@@ -84,7 +84,9 @@ function formatDate(date) {
  */
 function formatPercentage(value, decimals = 2) {
 	if (value === null || value === undefined) return "0%"
-	return `${Number.parseFloat(value).toFixed(decimals).replace(/\.?0+$/, '')}%`
+	return `${Number.parseFloat(value)
+		.toFixed(decimals)
+		.replace(/\.?0+$/, "")}%`
 }
 
 /**

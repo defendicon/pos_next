@@ -222,9 +222,7 @@ function handlePrintDraft(draft) {
 			grand_total: calculateTotal(draft.items),
 			posting_date: draft.created_at,
 			customer_name:
-				draft.customer?.customer_name ||
-				draft.customer?.name ||
-				draft.customer,
+				draft.customer?.customer_name || draft.customer?.name || draft.customer,
 			status: "Draft",
 		}
 		printInvoiceCustom(invoiceData)

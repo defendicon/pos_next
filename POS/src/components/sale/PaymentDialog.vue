@@ -640,7 +640,10 @@
 
 <script setup>
 import { usePOSSettingsStore } from "@/stores/posSettings"
-import { formatCurrency as formatCurrencyUtil, getCurrencySymbol } from "@/utils/currency"
+import {
+	formatCurrency as formatCurrencyUtil,
+	getCurrencySymbol,
+} from "@/utils/currency"
 import { getPaymentIcon } from "@/utils/payment"
 import { offlineWorker } from "@/utils/offline/workerClient"
 import { Button, Dialog, Input, createResource } from "frappe-ui"
@@ -691,7 +694,11 @@ const props = defineProps({
 	},
 })
 
-const emit = defineEmits(["update:modelValue", "payment-completed", "update-additional-discount"])
+const emit = defineEmits([
+	"update:modelValue",
+	"payment-completed",
+	"update-additional-discount",
+])
 
 const show = computed({
 	get: () => props.modelValue,
@@ -704,14 +711,18 @@ const lastSelectedMethod = ref(null)
 const customAmount = ref("")
 const paymentEntries = ref([])
 const customerCredit = ref([])
-const customerBalance = ref({ total_outstanding: 0, total_credit: 0, net_balance: 0 })
+const customerBalance = ref({
+	total_outstanding: 0,
+	total_credit: 0,
+	net_balance: 0,
+})
 const loadingCredit = ref(false)
 
 // Additional discount state
 const localAdditionalDiscount = ref(0)
 // Initialize discount type from settings (default to percentage if enabled, otherwise amount)
 const additionalDiscountType = ref(
-	settingsStore.usePercentageDiscount ? 'percentage' : 'amount'
+	settingsStore.usePercentageDiscount ? "percentage" : "amount",
 )
 
 const paymentMethodsResource = createResource({
@@ -736,7 +747,7 @@ const customerCreditResource = createResource({
 	url: "pos_next.api.credit_sales.get_available_credit",
 	makeParams() {
 		const customerName = props.customer?.name || props.customer
-		console.log('[PaymentDialog] Fetching credit for customer:', customerName)
+		console.log("[PaymentDialog] Fetching credit for customer:", customerName)
 		return {
 			customer: customerName,
 			company: props.company,
@@ -745,10 +756,13 @@ const customerCreditResource = createResource({
 	},
 	auto: false,
 	onSuccess(data) {
-		console.log('[PaymentDialog] Customer credit loaded:', data)
+		console.log("[PaymentDialog] Customer credit loaded:", data)
 		customerCredit.value = data || []
 		loadingCredit.value = false
-		console.log('[PaymentDialog] Total available credit:', totalAvailableCredit.value)
+		console.log(
+			"[PaymentDialog] Total available credit:",
+			totalAvailableCredit.value,
+		)
 	},
 	onError(error) {
 		console.error("[PaymentDialog] Error loading customer credit:", error)
@@ -761,7 +775,7 @@ const customerBalanceResource = createResource({
 	url: "pos_next.api.credit_sales.get_customer_balance",
 	makeParams() {
 		const customerName = props.customer?.name || props.customer
-		console.log('[PaymentDialog] Fetching balance for customer:', customerName)
+		console.log("[PaymentDialog] Fetching balance for customer:", customerName)
 		return {
 			customer: customerName,
 			company: props.company,
@@ -769,20 +783,31 @@ const customerBalanceResource = createResource({
 	},
 	auto: false,
 	onSuccess(data) {
-		console.log('[PaymentDialog] Customer balance loaded:', data)
-		customerBalance.value = data || { total_outstanding: 0, total_credit: 0, net_balance: 0 }
-		console.log('[PaymentDialog] Net balance:', customerBalance.value.net_balance)
+		console.log("[PaymentDialog] Customer balance loaded:", data)
+		customerBalance.value = data || {
+			total_outstanding: 0,
+			total_credit: 0,
+			net_balance: 0,
+		}
+		console.log(
+			"[PaymentDialog] Net balance:",
+			customerBalance.value.net_balance,
+		)
 	},
 	onError(error) {
 		console.error("[PaymentDialog] Error loading customer balance:", error)
-		customerBalance.value = { total_outstanding: 0, total_credit: 0, net_balance: 0 }
+		customerBalance.value = {
+			total_outstanding: 0,
+			total_credit: 0,
+			net_balance: 0,
+		}
 	},
 })
 
 // Sales Persons state
 const salesPersons = ref([])
 const selectedSalesPersons = ref([])
-const salesPersonSearch = ref('')
+const salesPersonSearch = ref("")
 const loadingSalesPersons = ref(false)
 
 const salesPersonsResource = createResource({
@@ -794,7 +819,7 @@ const salesPersonsResource = createResource({
 	},
 	auto: false,
 	onSuccess(data) {
-		console.log('[PaymentDialog] Sales persons loaded:', data)
+		console.log("[PaymentDialog] Sales persons loaded:", data)
 		salesPersons.value = data?.message || data || []
 		loadingSalesPersons.value = false
 	},
@@ -812,16 +837,16 @@ const filteredSalesPersons = computed(() => {
 	}
 
 	const searchLower = salesPersonSearch.value.toLowerCase()
-	const selectedIds = selectedSalesPersons.value.map(p => p.sales_person)
+	const selectedIds = selectedSalesPersons.value.map((p) => p.sales_person)
 
 	return salesPersons.value
-		.filter(person => {
+		.filter((person) => {
 			// Exclude already selected
 			if (selectedIds.includes(person.name)) {
 				return false
 			}
 			// Filter by search term
-			const name = (person.sales_person_name || person.name || '').toLowerCase()
+			const name = (person.sales_person_name || person.name || "").toLowerCase()
 			return name.includes(searchLower)
 		})
 		.slice(0, 10) // Limit to 10 results for performance
@@ -838,12 +863,14 @@ const totalAllocation = computed(() => {
 function addSalesPerson(person) {
 	// For Single mode, replace the existing selection
 	if (settingsStore.isSingleSalesPerson) {
-		selectedSalesPersons.value = [{
-			sales_person: person.name,
-			sales_person_name: person.sales_person_name || person.name,
-			allocated_percentage: 100, // Always 100% for single mode
-			commission_rate: person.commission_rate,
-		}]
+		selectedSalesPersons.value = [
+			{
+				sales_person: person.name,
+				sales_person_name: person.sales_person_name || person.name,
+				allocated_percentage: 100, // Always 100% for single mode
+				commission_rate: person.commission_rate,
+			},
+		]
 	} else {
 		// For Multiple mode, add to the list
 		// Calculate default allocation
@@ -858,18 +885,22 @@ function addSalesPerson(person) {
 	}
 
 	// Clear search after adding
-	salesPersonSearch.value = ''
+	salesPersonSearch.value = ""
 }
 
 function removeSalesPerson(personName) {
-	const index = selectedSalesPersons.value.findIndex(p => p.sales_person === personName)
+	const index = selectedSalesPersons.value.findIndex(
+		(p) => p.sales_person === personName,
+	)
 	if (index > -1) {
 		selectedSalesPersons.value.splice(index, 1)
 	}
 }
 
 function updateSalesPersonAllocation(personName, value) {
-	const person = selectedSalesPersons.value.find(p => p.sales_person === personName)
+	const person = selectedSalesPersons.value.find(
+		(p) => p.sales_person === personName,
+	)
 	if (person) {
 		person.allocated_percentage = Number.parseFloat(value) || 0
 	}
@@ -877,7 +908,7 @@ function updateSalesPersonAllocation(personName, value) {
 
 function clearSalesPersons() {
 	selectedSalesPersons.value = []
-	salesPersonSearch.value = ''
+	salesPersonSearch.value = ""
 }
 
 // Load payment methods - from cache if offline, from server if online
@@ -900,7 +931,9 @@ async function loadPaymentMethods() {
 	try {
 		if (props.isOffline) {
 			// Load from cache when offline using worker
-			const cached = await offlineWorker.getCachedPaymentMethods(props.posProfile)
+			const cached = await offlineWorker.getCachedPaymentMethods(
+				props.posProfile,
+			)
 			if (cached && cached.length > 0) {
 				paymentMethods.value = cached
 				if (paymentMethods.value.length > 0) {
@@ -1040,7 +1073,10 @@ watch(
 	() => props.posProfile,
 	(newProfile) => {
 		if (newProfile) {
-			console.log('[PaymentDialog] Preloading payment methods for profile:', newProfile)
+			console.log(
+				"[PaymentDialog] Preloading payment methods for profile:",
+				newProfile,
+			)
 			loadPaymentMethods()
 			// Also preload sales persons if enabled
 			if (settingsStore.enableSalesPersons && salesPersons.value.length === 0) {
@@ -1049,7 +1085,7 @@ watch(
 			}
 		}
 	},
-	{ immediate: true } // Load immediately if posProfile is already set
+	{ immediate: true }, // Load immediately if posProfile is already set
 )
 
 watch(show, (newVal) => {
@@ -1059,16 +1095,20 @@ watch(show, (newVal) => {
 		customAmount.value = ""
 		lastSelectedMethod.value = null
 		customerCredit.value = []
-		customerBalance.value = { total_outstanding: 0, total_credit: 0, net_balance: 0 }
+		customerBalance.value = {
+			total_outstanding: 0,
+			total_credit: 0,
+			net_balance: 0,
+		}
 		selectedSalesPersons.value = []
-		salesPersonSearch.value = ''
+		salesPersonSearch.value = ""
 
 		// Debug logging
-		console.log('[PaymentDialog] Dialog opened with props:', {
+		console.log("[PaymentDialog] Dialog opened with props:", {
 			allowCreditSale: props.allowCreditSale,
 			customer: props.customer,
 			company: props.company,
-			posProfile: props.posProfile
+			posProfile: props.posProfile,
 		})
 
 		// Set default payment method if already loaded
@@ -1079,15 +1119,15 @@ watch(show, (newVal) => {
 
 		// Load customer credit and balance if enabled and customer is selected
 		if (props.allowCreditSale && props.customer && props.company) {
-			console.log('[PaymentDialog] Loading customer credit and balance...')
+			console.log("[PaymentDialog] Loading customer credit and balance...")
 			loadingCredit.value = true
 			customerCreditResource.fetch()
 			customerBalanceResource.fetch()
 		} else {
-			console.log('[PaymentDialog] Not loading credit because:', {
+			console.log("[PaymentDialog] Not loading credit because:", {
 				allowCreditSale: props.allowCreditSale,
 				hasCustomer: !!props.customer,
-				hasCompany: !!props.company
+				hasCompany: !!props.company,
 			})
 		}
 	}
@@ -1095,10 +1135,10 @@ watch(show, (newVal) => {
 
 // One-click payment - adds remaining amount with selected method
 function quickAddPayment(method) {
-	console.log('[PaymentDialog] Quick add payment:', {
+	console.log("[PaymentDialog] Quick add payment:", {
 		method: method.mode_of_payment,
 		remainingAmount: remainingAmount.value,
-		currentEntries: paymentEntries.value.length
+		currentEntries: paymentEntries.value.length,
 	})
 
 	if (remainingAmount.value === 0) return
@@ -1108,19 +1148,22 @@ function quickAddPayment(method) {
 	paymentEntries.value.push({
 		mode_of_payment: method.mode_of_payment,
 		amount: Number.parseFloat(remainingAmount.value.toFixed(2)),
-		type: method.type || __('Cash'),
+		type: method.type || __("Cash"),
 	})
 
-	console.log('[PaymentDialog] Payment added, new entries:', paymentEntries.value)
+	console.log(
+		"[PaymentDialog] Payment added, new entries:",
+		paymentEntries.value,
+	)
 	customAmount.value = ""
 }
 
 // Add custom amount for a method
 function addCustomPayment(method, amount) {
-	console.log('[PaymentDialog] Add custom payment:', {
+	console.log("[PaymentDialog] Add custom payment:", {
 		method: method.mode_of_payment,
 		amount: amount,
-		currentEntries: paymentEntries.value.length
+		currentEntries: paymentEntries.value.length,
 	})
 
 	const amt = Number.parseFloat(amount)
@@ -1129,25 +1172,31 @@ function addCustomPayment(method, amount) {
 	paymentEntries.value.push({
 		mode_of_payment: method.mode_of_payment,
 		amount: amt,
-		type: method.type || __('Cash'),
+		type: method.type || __("Cash"),
 	})
 
-	console.log('[PaymentDialog] Payment added, new entries:', paymentEntries.value)
+	console.log(
+		"[PaymentDialog] Payment added, new entries:",
+		paymentEntries.value,
+	)
 	customAmount.value = ""
 }
 
 // Apply existing customer credit to payment
 function applyCustomerCredit() {
-	console.log('[PaymentDialog] Apply customer credit:', {
+	console.log("[PaymentDialog] Apply customer credit:", {
 		totalCredit: totalAvailableCredit.value,
 		remainingAmount: remainingAmount.value,
-		currentEntries: paymentEntries.value.length
+		currentEntries: paymentEntries.value.length,
 	})
 
 	if (remainingAmount.value === 0 || totalAvailableCredit.value === 0) return
 
 	// Calculate how much credit to apply (min of remaining amount and available credit)
-	const creditToApply = Math.min(remainingAmount.value, totalAvailableCredit.value)
+	const creditToApply = Math.min(
+		remainingAmount.value,
+		totalAvailableCredit.value,
+	)
 
 	// Add credit as a payment entry
 	paymentEntries.value.push({
@@ -1155,35 +1204,41 @@ function applyCustomerCredit() {
 		amount: Number.parseFloat(creditToApply.toFixed(2)),
 		type: "Credit",
 		is_customer_credit: true,
-		credit_details: customerCredit.value.map(credit => ({
+		credit_details: customerCredit.value.map((credit) => ({
 			...credit,
-			credit_to_redeem: 0  // Will be calculated on backend
-		}))
+			credit_to_redeem: 0, // Will be calculated on backend
+		})),
 	})
 
-	console.log('[PaymentDialog] Existing credit applied, new entries:', paymentEntries.value)
+	console.log(
+		"[PaymentDialog] Existing credit applied, new entries:",
+		paymentEntries.value,
+	)
 }
 
 // Add "Pay on Account" - Credit Sale (invoice with outstanding amount)
 function addCreditAccountPayment() {
-	console.log('[PaymentDialog] Add credit account payment (Pay Later):', {
+	console.log("[PaymentDialog] Add credit account payment (Pay Later):", {
 		grandTotal: props.grandTotal,
 		currentPaid: totalPaid.value,
-		remainingAmount: remainingAmount.value
+		remainingAmount: remainingAmount.value,
 	})
 
 	// Close dialog and complete as credit sale (0 payment)
 	// The backend will create an invoice with outstanding amount
 	const paymentData = {
-		payments: [],  // No payments - full amount on credit
+		payments: [], // No payments - full amount on credit
 		change_amount: 0,
 		is_partial_payment: false,
-		is_credit_sale: true,  // Mark as credit sale
+		is_credit_sale: true, // Mark as credit sale
 		paid_amount: 0,
 		outstanding_amount: props.grandTotal,
 	}
 
-	console.log('[PaymentDialog] Emitting credit sale payment-completed:', paymentData)
+	console.log(
+		"[PaymentDialog] Emitting credit sale payment-completed:",
+		paymentData,
+	)
 	emit("payment-completed", paymentData)
 	show.value = false
 }
@@ -1205,17 +1260,17 @@ function clearAll() {
 }
 
 function completePayment() {
-	console.log('[PaymentDialog] Complete payment called:', {
+	console.log("[PaymentDialog] Complete payment called:", {
 		canComplete: canComplete.value,
 		totalPaid: totalPaid.value,
 		grandTotal: props.grandTotal,
 		allowPartialPayment: props.allowPartialPayment,
 		paymentEntries: paymentEntries.value,
-		salesPersons: selectedSalesPersons.value
+		salesPersons: selectedSalesPersons.value,
 	})
 
 	if (!canComplete.value) {
-		console.warn('[PaymentDialog] Cannot complete - validation failed')
+		console.warn("[PaymentDialog] Cannot complete - validation failed")
 		return
 	}
 
@@ -1227,10 +1282,11 @@ function completePayment() {
 		is_partial_payment: isPartial,
 		paid_amount: totalPaid.value,
 		outstanding_amount: isPartial ? remainingAmount.value : 0,
-		sales_team: selectedSalesPersons.value.length > 0 ? selectedSalesPersons.value : null,
+		sales_team:
+			selectedSalesPersons.value.length > 0 ? selectedSalesPersons.value : null,
 	}
 
-	console.log('[PaymentDialog] Emitting payment-completed:', paymentData)
+	console.log("[PaymentDialog] Emitting payment-completed:", paymentData)
 
 	emit("payment-completed", paymentData)
 
@@ -1248,20 +1304,26 @@ function getMethodTotal(methodName) {
 		.reduce((sum, entry) => sum + (entry.amount || 0), 0)
 }
 
-
 // Additional discount handlers
 function handleAdditionalDiscountChange() {
 	let discountValue = localAdditionalDiscount.value
 	let discountAmount = 0
 
 	// If percentage mode, calculate amount
-	if (additionalDiscountType.value === 'percentage') {
+	if (additionalDiscountType.value === "percentage") {
 		// Validate against max_discount_allowed if configured
-		if (settingsStore.maxDiscountAllowed > 0 && discountValue > settingsStore.maxDiscountAllowed) {
+		if (
+			settingsStore.maxDiscountAllowed > 0 &&
+			discountValue > settingsStore.maxDiscountAllowed
+		) {
 			localAdditionalDiscount.value = settingsStore.maxDiscountAllowed
 			discountValue = settingsStore.maxDiscountAllowed
 			// Show warning toast
-			showWarning(__('Maximum allowed discount is {0}%', [settingsStore.maxDiscountAllowed]))
+			showWarning(
+				__("Maximum allowed discount is {0}%", [
+					settingsStore.maxDiscountAllowed,
+				]),
+			)
 		}
 
 		// Ensure percentage is between 0-100
@@ -1280,19 +1342,25 @@ function handleAdditionalDiscountChange() {
 		if (settingsStore.maxDiscountAllowed > 0 && props.subtotal > 0) {
 			const percentageEquivalent = (discountAmount / props.subtotal) * 100
 			if (percentageEquivalent > settingsStore.maxDiscountAllowed) {
-				const maxAmount = (props.subtotal * settingsStore.maxDiscountAllowed) / 100
+				const maxAmount =
+					(props.subtotal * settingsStore.maxDiscountAllowed) / 100
 				localAdditionalDiscount.value = maxAmount
 				discountAmount = maxAmount
 				// Show warning toast
-				showWarning(__('Maximum allowed discount is {0}% ({1} {2})',
-				[settingsStore.maxDiscountAllowed, props.currency, maxAmount.toFixed(2)]))
+				showWarning(
+					__("Maximum allowed discount is {0}% ({1} {2})", [
+						settingsStore.maxDiscountAllowed,
+						props.currency,
+						maxAmount.toFixed(2),
+					]),
+				)
 			}
 		}
 	}
 
 	// Ensure discount doesn't exceed subtotal
 	if (discountAmount > props.subtotal) {
-		if (additionalDiscountType.value === 'amount') {
+		if (additionalDiscountType.value === "amount") {
 			localAdditionalDiscount.value = props.subtotal
 		}
 		discountAmount = props.subtotal

@@ -60,7 +60,8 @@ if ("serviceWorker" in navigator) {
 					onNeedRefresh: () => log.info("New content available, reloading..."),
 					onOfflineReady: () => log.info("App ready to work offline"),
 					onRegistered: (reg) => log.info("Service Worker registered", reg),
-					onRegisterError: (err) => log.error("Service Worker registration error", err),
+					onRegisterError: (err) =>
+						log.error("Service Worker registration error", err),
 				})
 			})
 		},
@@ -131,7 +132,9 @@ async function initializeApp() {
 
 	// Disable double-tap zoom on mobile for faster touch response
 	app.directive("touch-action", {
-		mounted: (el) => (el.style.touchAction = "manipulation"),
+		mounted: (el) => {
+			el.style.touchAction = "manipulation"
+		},
 	})
 
 	// -------------------------------------------------------------------------
@@ -163,6 +166,22 @@ async function initializeApp() {
 			await userResource.promise
 			return sessionUser()
 		} catch (error) {
+			// If offline or network error, try to use local session from cookie
+			if (
+				!navigator.onLine ||
+				error.message?.includes("Network Error") ||
+				error.message?.includes("Failed to fetch")
+			) {
+				const localUser = sessionUser()
+				if (localUser) {
+					log.info(
+						"Network failed, using offline session from cookie:",
+						localUser,
+					)
+					return localUser
+				}
+			}
+
 			log.debug("User not logged in", error?.message || "No session")
 			return null
 		}
@@ -179,9 +198,11 @@ async function initializeApp() {
 	if (user) {
 		import("./stores/bootstrap")
 			.then(({ useBootstrapStore }) => {
-				useBootstrapStore().loadInitialData().catch((error) => {
-					log.debug("Bootstrap preload failed (non-critical)", error)
-				})
+				useBootstrapStore()
+					.loadInitialData()
+					.catch((error) => {
+						log.debug("Bootstrap preload failed (non-critical)", error)
+					})
 			})
 			.catch(() => {})
 	}

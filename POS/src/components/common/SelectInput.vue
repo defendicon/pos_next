@@ -98,7 +98,7 @@ const containerRef = ref(null)
 const optionRefs = ref([])
 
 const selectedLabel = computed(() => {
-	const selected = props.options.find(opt => opt.value === props.modelValue)
+	const selected = props.options.find((opt) => opt.value === props.modelValue)
 	return selected?.label || ""
 })
 

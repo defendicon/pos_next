@@ -251,7 +251,7 @@ if (typeof window !== "undefined") {
 	// Listen to centralized offline state changes for auto-sync
 	offlineState.subscribe(async (state) => {
 		// Only sync when transitioning from offline to online
-		if (!state.isOffline && state.source !== 'manual') {
+		if (!state.isOffline && state.source !== "manual") {
 			console.log("Back online, syncing pending invoices...")
 			const result = await syncOfflineInvoices()
 

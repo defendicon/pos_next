@@ -6,54 +6,134 @@
 export {}
 
 /* prettier-ignore */
-declare module 'vue' {
-  export interface GlobalComponents {
-    ActionButton: typeof import('./src/components/common/ActionButton.vue')['default']
-    AutocompleteSelect: typeof import('./src/components/common/AutocompleteSelect.vue')['default']
-    BatchSerialDialog: typeof import('./src/components/sale/BatchSerialDialog.vue')['default']
-    CheckboxField: typeof import('./src/components/settings/CheckboxField.vue')['default']
-    ClearCacheOverlay: typeof import('./src/components/common/ClearCacheOverlay.vue')['default']
-    CountryCodeSelector: typeof import('./src/components/common/CountryCodeSelector.vue')['default']
-    CouponDialog: typeof import('./src/components/sale/CouponDialog.vue')['default']
-    CouponManagement: typeof import('./src/components/sale/CouponManagement.vue')['default']
-    CreateCustomerDialog: typeof import('./src/components/sale/CreateCustomerDialog.vue')['default']
-    CustomerDialog: typeof import('./src/components/sale/CustomerDialog.vue')['default']
-    DraftInvoicesDialog: typeof import('./src/components/sale/DraftInvoicesDialog.vue')['default']
-    EditItemDialog: typeof import('./src/components/sale/EditItemDialog.vue')['default']
-    InstallAppBadge: typeof import('./src/components/common/InstallAppBadge.vue')['default']
-    InvoiceCart: typeof import('./src/components/sale/InvoiceCart.vue')['default']
-    InvoiceDetailDialog: typeof import('./src/components/invoices/InvoiceDetailDialog.vue')['default']
-    InvoiceFilters: typeof import('./src/components/invoices/InvoiceFilters.vue')['default']
-    InvoiceHistoryDialog: typeof import('./src/components/sale/InvoiceHistoryDialog.vue')['default']
-    InvoiceManagement: typeof import('./src/components/invoices/InvoiceManagement.vue')['default']
-    ItemSelectionDialog: typeof import('./src/components/sale/ItemSelectionDialog.vue')['default']
-    ItemsSelector: typeof import('./src/components/sale/ItemsSelector.vue')['default']
-    LanguageSwitcher: typeof import('./src/components/common/LanguageSwitcher.vue')['default']
-    LazyImage: typeof import('./src/components/common/LazyImage.vue')['default']
-    LoadingSpinner: typeof import('./src/components/common/LoadingSpinner.vue')['default']
-    ManagementSlider: typeof import('./src/components/pos/ManagementSlider.vue')['default']
-    NumberField: typeof import('./src/components/settings/NumberField.vue')['default']
-    OffersDialog: typeof import('./src/components/sale/OffersDialog.vue')['default']
-    OfflineInvoicesDialog: typeof import('./src/components/sale/OfflineInvoicesDialog.vue')['default']
-    PartialPayments: typeof import('./src/components/partials/PartialPayments.vue')['default']
-    PaymentDialog: typeof import('./src/components/sale/PaymentDialog.vue')['default']
-    PhoneInput: typeof import('./src/components/common/PhoneInput.vue')['default']
-    POSFooter: typeof import('./src/components/common/POSFooter.vue')['default']
-    POSHeader: typeof import('./src/components/pos/POSHeader.vue')['default']
-    POSSettings: typeof import('./src/components/settings/POSSettings.vue')['default']
-    PromotionManagement: typeof import('./src/components/sale/PromotionManagement.vue')['default']
-    ReturnInvoiceDialog: typeof import('./src/components/sale/ReturnInvoiceDialog.vue')['default']
-    RouterLink: typeof import('vue-router')['RouterLink']
-    RouterView: typeof import('vue-router')['RouterView']
-    SelectField: typeof import('./src/components/settings/SelectField.vue')['default']
-    SelectInput: typeof import('./src/components/common/SelectInput.vue')['default']
-    SettingsSection: typeof import('./src/components/settings/SettingsSection.vue')['default']
-    ShiftClosingDialog: typeof import('./src/components/ShiftClosingDialog.vue')['default']
-    ShiftOpeningDialog: typeof import('./src/components/ShiftOpeningDialog.vue')['default']
-    StatusBadge: typeof import('./src/components/common/StatusBadge.vue')['default']
-    Toast: typeof import('./src/components/common/Toast.vue')['default']
-    TranslatedHTML: typeof import('./src/components/common/TranslatedHTML.vue')['default']
-    UserMenu: typeof import('./src/components/common/UserMenu.vue')['default']
-    WarehouseAvailabilityDialog: typeof import('./src/components/sale/WarehouseAvailabilityDialog.vue')['default']
-  }
+declare module "vue" {
+	export interface GlobalComponents {
+		ActionButton: typeof import(
+			"./src/components/common/ActionButton.vue",
+		)["default"]
+		AutocompleteSelect: typeof import(
+			"./src/components/common/AutocompleteSelect.vue",
+		)["default"]
+		BatchSerialDialog: typeof import(
+			"./src/components/sale/BatchSerialDialog.vue",
+		)["default"]
+		CheckboxField: typeof import(
+			"./src/components/settings/CheckboxField.vue",
+		)["default"]
+		ClearCacheOverlay: typeof import(
+			"./src/components/common/ClearCacheOverlay.vue",
+		)["default"]
+		CountryCodeSelector: typeof import(
+			"./src/components/common/CountryCodeSelector.vue",
+		)["default"]
+		CouponDialog: typeof import(
+			"./src/components/sale/CouponDialog.vue",
+		)["default"]
+		CouponManagement: typeof import(
+			"./src/components/sale/CouponManagement.vue",
+		)["default"]
+		CreateCustomerDialog: typeof import(
+			"./src/components/sale/CreateCustomerDialog.vue",
+		)["default"]
+		CustomerDialog: typeof import(
+			"./src/components/sale/CustomerDialog.vue",
+		)["default"]
+		DraftInvoicesDialog: typeof import(
+			"./src/components/sale/DraftInvoicesDialog.vue",
+		)["default"]
+		EditItemDialog: typeof import(
+			"./src/components/sale/EditItemDialog.vue",
+		)["default"]
+		InstallAppBadge: typeof import(
+			"./src/components/common/InstallAppBadge.vue",
+		)["default"]
+		InvoiceCart: typeof import(
+			"./src/components/sale/InvoiceCart.vue",
+		)["default"]
+		InvoiceDetailDialog: typeof import(
+			"./src/components/invoices/InvoiceDetailDialog.vue",
+		)["default"]
+		InvoiceFilters: typeof import(
+			"./src/components/invoices/InvoiceFilters.vue",
+		)["default"]
+		InvoiceHistoryDialog: typeof import(
+			"./src/components/sale/InvoiceHistoryDialog.vue",
+		)["default"]
+		InvoiceManagement: typeof import(
+			"./src/components/invoices/InvoiceManagement.vue",
+		)["default"]
+		ItemSelectionDialog: typeof import(
+			"./src/components/sale/ItemSelectionDialog.vue",
+		)["default"]
+		ItemsSelector: typeof import(
+			"./src/components/sale/ItemsSelector.vue",
+		)["default"]
+		LanguageSwitcher: typeof import(
+			"./src/components/common/LanguageSwitcher.vue",
+		)["default"]
+		LazyImage: typeof import("./src/components/common/LazyImage.vue")["default"]
+		LoadingSpinner: typeof import(
+			"./src/components/common/LoadingSpinner.vue",
+		)["default"]
+		ManagementSlider: typeof import(
+			"./src/components/pos/ManagementSlider.vue",
+		)["default"]
+		NumberField: typeof import(
+			"./src/components/settings/NumberField.vue",
+		)["default"]
+		OffersDialog: typeof import(
+			"./src/components/sale/OffersDialog.vue",
+		)["default"]
+		OfflineInvoicesDialog: typeof import(
+			"./src/components/sale/OfflineInvoicesDialog.vue",
+		)["default"]
+		PartialPayments: typeof import(
+			"./src/components/partials/PartialPayments.vue",
+		)["default"]
+		PaymentDialog: typeof import(
+			"./src/components/sale/PaymentDialog.vue",
+		)["default"]
+		PhoneInput: typeof import(
+			"./src/components/common/PhoneInput.vue",
+		)["default"]
+		POSFooter: typeof import("./src/components/common/POSFooter.vue")["default"]
+		POSHeader: typeof import("./src/components/pos/POSHeader.vue")["default"]
+		POSSettings: typeof import(
+			"./src/components/settings/POSSettings.vue",
+		)["default"]
+		PromotionManagement: typeof import(
+			"./src/components/sale/PromotionManagement.vue",
+		)["default"]
+		ReturnInvoiceDialog: typeof import(
+			"./src/components/sale/ReturnInvoiceDialog.vue",
+		)["default"]
+		RouterLink: typeof import("vue-router")["RouterLink"]
+		RouterView: typeof import("vue-router")["RouterView"]
+		SelectField: typeof import(
+			"./src/components/settings/SelectField.vue",
+		)["default"]
+		SelectInput: typeof import(
+			"./src/components/common/SelectInput.vue",
+		)["default"]
+		SettingsSection: typeof import(
+			"./src/components/settings/SettingsSection.vue",
+		)["default"]
+		ShiftClosingDialog: typeof import(
+			"./src/components/ShiftClosingDialog.vue",
+		)["default"]
+		ShiftOpeningDialog: typeof import(
+			"./src/components/ShiftOpeningDialog.vue",
+		)["default"]
+		StatusBadge: typeof import(
+			"./src/components/common/StatusBadge.vue",
+		)["default"]
+		Toast: typeof import("./src/components/common/Toast.vue")["default"]
+		TranslatedHTML: typeof import(
+			"./src/components/common/TranslatedHTML.vue",
+		)["default"]
+		UserMenu: typeof import("./src/components/common/UserMenu.vue")["default"]
+		WarehouseAvailabilityDialog: typeof import(
+			"./src/components/sale/WarehouseAvailabilityDialog.vue",
+		)["default"]
+	}
 }

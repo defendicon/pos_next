@@ -740,13 +740,19 @@ const settingsStore = posSettingsStore
 const { onStockUpdate } = useRealtimeStock()
 
 // POS Events system
-const { onWarehouseChanged, onPricingChanged, onStockPolicyChanged, onSettingsChanged, onSalesOperationsChanged } = usePOSEvents()
+const {
+	onWarehouseChanged,
+	onPricingChanged,
+	onStockPolicyChanged,
+	onSettingsChanged,
+	onSalesOperationsChanged,
+} = usePOSEvents()
 
 // Initialize toast
 const { showSuccess, showError, showWarning } = useToast()
 
 // Initialize logger
-const log = logger.create('POSSale')
+const log = logger.create("POSSale")
 
 // User data composable
 const { userName, userImage } = useUserData()
@@ -893,12 +899,14 @@ onMounted(async () => {
 
 	// Listen to pricing changes from settings
 	onPricingChanged(async ({ changes }) => {
-		log.info('Event: Pricing settings changed', changes)
+		log.info("Event: Pricing settings changed", changes)
 
 		// Update tax_inclusive setting if it changed
-		if (changes.hasOwnProperty('tax_inclusive')) {
+		if (changes.hasOwnProperty("tax_inclusive")) {
 			const newTaxInclusive = changes.tax_inclusive.new
-			log.info(`Updating tax_inclusive from ${changes.tax_inclusive.old} to ${newTaxInclusive}`)
+			log.info(
+				`Updating tax_inclusive from ${changes.tax_inclusive.old} to ${newTaxInclusive}`,
+			)
 
 			// Update the cart store tax inclusive setting
 			cartStore.setTaxInclusive(newTaxInclusive)
@@ -906,47 +914,52 @@ onMounted(async () => {
 			// Reload tax rules to ensure they're applied with the new setting
 			// This is critical because tax_inclusive affects how taxes are calculated
 			try {
-				log.info('Reloading tax rules with new tax_inclusive setting...')
-				await cartStore.loadTaxRules(
-					shiftStore.currentShift?.pos_profile,
-					{ tax_inclusive: newTaxInclusive }
-				)
-				log.info('Tax rules reloaded successfully')
+				log.info("Reloading tax rules with new tax_inclusive setting...")
+				await cartStore.loadTaxRules(shiftStore.currentShift?.pos_profile, {
+					tax_inclusive: newTaxInclusive,
+				})
+				log.info("Tax rules reloaded successfully")
 			} catch (error) {
-				log.error('Failed to reload tax rules:', error)
+				log.error("Failed to reload tax rules:", error)
 			}
 		}
 
 		// Recalculate cart items if there are any
 		if (cartStore.invoiceItems.length > 0) {
-			cartStore.invoiceItems.forEach(item => {
+			cartStore.invoiceItems.forEach((item) => {
 				cartStore.recalculateItem(item)
 			})
 			cartStore.rebuildIncrementalCache()
 
-			const message = changes.hasOwnProperty('tax_inclusive')
-				? __('Tax mode updated. Cart recalculated with new tax settings.')
-				: __('Discount settings changed. Cart recalculated.')
+			const message = changes.hasOwnProperty("tax_inclusive")
+				? __("Tax mode updated. Cart recalculated with new tax settings.")
+				: __("Discount settings changed. Cart recalculated.")
 
 			showSuccess(message)
-		} else if (changes.hasOwnProperty('tax_inclusive')) {
+		} else if (changes.hasOwnProperty("tax_inclusive")) {
 			// Show feedback even if cart is empty
-			showSuccess(changes.tax_inclusive.new
-				? __('Prices are now tax-inclusive. This will apply to new items added to cart.')
-				: __('Prices are now tax-exclusive. This will apply to new items added to cart.'))
+			showSuccess(
+				changes.tax_inclusive.new
+					? __(
+							"Prices are now tax-inclusive. This will apply to new items added to cart.",
+						)
+					: __(
+							"Prices are now tax-exclusive. This will apply to new items added to cart.",
+						),
+			)
 		}
 	})
 
 	// Listen to stock policy changes
 	onStockPolicyChanged(({ changes, requiresReload }) => {
-		log.info('Event: Stock policy changed', changes)
+		log.info("Event: Stock policy changed", changes)
 
 		if (changes.allow_negative_stock) {
 			const isNowAllowed = changes.allow_negative_stock.new
 
 			const message = isNowAllowed
-				? __('Negative stock sales are now allowed')
-				: __('Negative stock sales are now restricted')
+				? __("Negative stock sales are now allowed")
+				: __("Negative stock sales are now restricted")
 
 			showSuccess(message)
 		}
@@ -954,33 +967,33 @@ onMounted(async () => {
 
 	// Listen to sales operations changes
 	onSalesOperationsChanged(({ changes }) => {
-		log.info('Event: Sales operations settings changed', changes)
+		log.info("Event: Sales operations settings changed", changes)
 
 		// Reload settings in the store to get fresh values
 		posSettingsStore.reloadSettings()
 
 		// Show notification for specific important changes
 		const changeLabels = {
-			allow_credit_sale: __('Credit Sale'),
-			allow_return: __('Returns'),
-			allow_write_off_change: __('Write Off Change'),
-			allow_partial_payment: __('Partial Payment'),
-			silent_print: __('Silent Print')
+			allow_credit_sale: __("Credit Sale"),
+			allow_return: __("Returns"),
+			allow_write_off_change: __("Write Off Change"),
+			allow_partial_payment: __("Partial Payment"),
+			silent_print: __("Silent Print"),
 		}
 
 		const changedSettings = Object.keys(changes)
-			.map(key => changeLabels[key])
+			.map((key) => changeLabels[key])
 			.filter(Boolean)
-			.join(', ')
+			.join(", ")
 
 		if (changedSettings) {
-			showSuccess(__('{0} settings applied immediately', [changedSettings]))
+			showSuccess(__("{0} settings applied immediately", [changedSettings]))
 		}
 	})
 
 	// Listen to general settings changes (catch-all for any setting change)
 	onSettingsChanged(async ({ changes }) => {
-		log.info('Event: Settings changed', changes)
+		log.info("Event: Settings changed", changes)
 
 		// Reload settings to ensure all computed properties are fresh
 		await posSettingsStore.reloadSettings()
@@ -1006,13 +1019,16 @@ onMounted(async () => {
 
 				// Load POS Settings
 				await posSettingsStore.loadSettings(shiftStore.profileName)
-				log.info('POS Settings loaded:', {
+				log.info("POS Settings loaded:", {
 					allowPartialPayment: posSettingsStore.allowPartialPayment,
-					settings: posSettingsStore.settings
+					settings: posSettingsStore.settings,
 				})
 
 				// Load tax rules with tax_inclusive setting from POS Settings
-				await cartStore.loadTaxRules(shiftStore.profileName, posSettingsStore.settings)
+				await cartStore.loadTaxRules(
+					shiftStore.profileName,
+					posSettingsStore.settings,
+				)
 
 				// Set default customer from POS Profile if configured
 				await cartStore.setDefaultCustomer()
@@ -1131,7 +1147,7 @@ watch(
 // Track if periodic sync has been initialized
 let periodicSyncConfigured = false
 let lastSyncWarehouse = null
-let lastSyncItemSignature = ''
+let lastSyncItemSignature = ""
 
 // Watch for items to be loaded or changed, then configure periodic stock sync
 watch(
@@ -1141,9 +1157,10 @@ watch(
 		const count = items.length
 
 		// Create signature from item codes to detect catalog changes even with same count
-		const signature = count > 0
-			? `${items[0]?.item_code || ''}-${items[Math.floor(count/2)]?.item_code || ''}-${items[count-1]?.item_code || ''}`
-			: ''
+		const signature =
+			count > 0
+				? `${items[0]?.item_code || ""}-${items[Math.floor(count / 2)]?.item_code || ""}-${items[count - 1]?.item_code || ""}`
+				: ""
 
 		return { count, warehouse, signature }
 	},
@@ -1165,15 +1182,19 @@ watch(
 		// Update configuration when warehouse changes or items change (including replacements)
 		else if (periodicSyncConfigured && (warehouseChanged || itemsChanged)) {
 			if (warehouseChanged) {
-				log.info(`Warehouse changed (${lastSyncWarehouse} → ${warehouse}), updating periodic stock sync`)
+				log.info(
+					`Warehouse changed (${lastSyncWarehouse} → ${warehouse}), updating periodic stock sync`,
+				)
 			} else {
-				log.info(`Items changed (catalog replacement or new items), updating periodic stock sync`)
+				log.info(
+					`Items changed (catalog replacement or new items), updating periodic stock sync`,
+				)
 			}
 			await updatePeriodicStockSyncItems(warehouse)
 			lastSyncWarehouse = warehouse
 			lastSyncItemSignature = signature
 		}
-	}
+	},
 )
 
 onUnmounted(() => {
@@ -1201,41 +1222,41 @@ async function setupPeriodicStockSync(warehouse) {
 		let syncIntervalMs = 60000 // Default 60 seconds
 
 		try {
-			const savedSettings = localStorage.getItem('pos_stock_sync_settings')
+			const savedSettings = localStorage.getItem("pos_stock_sync_settings")
 			if (savedSettings) {
 				const parsed = JSON.parse(savedSettings)
 				syncEnabled = parsed.enabled ?? false
 				syncIntervalMs = (parsed.intervalSeconds ?? 60) * 1000
 			}
 		} catch (error) {
-			log.error('Failed to load stock sync settings:', error)
+			log.error("Failed to load stock sync settings:", error)
 		}
 
 		// Get all currently loaded item codes from the item store
-		const itemCodes = itemStore.allItems.map(item => item.item_code)
+		const itemCodes = itemStore.allItems.map((item) => item.item_code)
 
 		// Configure stock sync with warehouse and items
 		const config = await offlineWorker.configureStockSync({
 			warehouse,
 			itemCodes,
-			intervalMs: syncIntervalMs
+			intervalMs: syncIntervalMs,
 		})
 
-		log.info('Periodic stock sync configured:', config)
+		log.info("Periodic stock sync configured:", config)
 
 		// Only start sync if user has enabled it
 		if (syncEnabled) {
 			const result = await offlineWorker.startStockSync()
-			log.success('Periodic stock sync started:', result.status)
+			log.success("Periodic stock sync started:", result.status)
 			isStockSyncActive.value = true
 		} else {
-			log.info('Stock sync is disabled in settings (not starting)')
+			log.info("Stock sync is disabled in settings (not starting)")
 			isStockSyncActive.value = false
 		}
 
 		// Listen for stock sync completion events (regardless of enabled state)
-		window.addEventListener('stockSyncComplete', handleStockSyncComplete)
-		window.addEventListener('stockSyncError', handleStockSyncError)
+		window.addEventListener("stockSyncComplete", handleStockSyncComplete)
+		window.addEventListener("stockSyncError", handleStockSyncError)
 
 		// Poll stock sync status every 10 seconds to update the indicator
 		const statusPollInterval = setInterval(async () => {
@@ -1252,7 +1273,7 @@ async function setupPeriodicStockSync(warehouse) {
 			clearInterval(statusPollInterval)
 		})
 	} catch (error) {
-		log.error('Failed to setup periodic stock sync:', error)
+		log.error("Failed to setup periodic stock sync:", error)
 	}
 }
 
@@ -1262,7 +1283,9 @@ async function setupPeriodicStockSync(warehouse) {
 async function handleStockSyncComplete(event) {
 	const { updated, total, duration } = event.detail
 
-	log.success(`Background stock sync: ${updated}/${total} items updated in ${duration}ms`)
+	log.success(
+		`Background stock sync: ${updated}/${total} items updated in ${duration}ms`,
+	)
 
 	// The worker has already updated IndexedDB
 	// Now we need to refresh the Pinia stock store from IndexedDB or server
@@ -1272,7 +1295,7 @@ async function handleStockSyncComplete(event) {
 		try {
 			await stockStore.refresh(null, shiftStore.profileWarehouse)
 		} catch (err) {
-			log.error('Failed to refresh stock after background sync:', err)
+			log.error("Failed to refresh stock after background sync:", err)
 		}
 
 		// Refresh cache stats to update the "Last Sync" timestamp in the tooltip
@@ -1280,7 +1303,7 @@ async function handleStockSyncComplete(event) {
 			const stats = await offlineWorker.getCacheStats()
 			itemStore.cacheStats = stats
 		} catch (error) {
-			log.error('Failed to refresh cache stats:', error)
+			log.error("Failed to refresh cache stats:", error)
 		}
 	}
 }
@@ -1290,7 +1313,7 @@ async function handleStockSyncComplete(event) {
  */
 function handleStockSyncError(event) {
 	const { message } = event.detail
-	log.warn('Background stock sync error:', message)
+	log.warn("Background stock sync error:", message)
 }
 
 /**
@@ -1300,7 +1323,7 @@ function handleStockSyncError(event) {
 async function updatePeriodicStockSyncItems(warehouse) {
 	try {
 		// Get all currently loaded item codes
-		const itemCodes = itemStore.allItems.map(item => item.item_code)
+		const itemCodes = itemStore.allItems.map((item) => item.item_code)
 
 		// Reconfigure worker with updated item list
 		await offlineWorker.configureStockSync({
@@ -1311,14 +1334,14 @@ async function updatePeriodicStockSyncItems(warehouse) {
 
 		log.info(`Updated periodic stock sync with ${itemCodes.length} items`)
 	} catch (error) {
-		log.error('Failed to update periodic stock sync items:', error)
+		log.error("Failed to update periodic stock sync items:", error)
 	}
 }
 
 // Cleanup event listeners on unmount
 onUnmounted(() => {
-	window.removeEventListener('stockSyncComplete', handleStockSyncComplete)
-	window.removeEventListener('stockSyncError', handleStockSyncError)
+	window.removeEventListener("stockSyncComplete", handleStockSyncComplete)
+	window.removeEventListener("stockSyncError", handleStockSyncError)
 })
 
 // Handlers
@@ -1330,7 +1353,10 @@ async function handleShiftOpened() {
 		// Load POS Settings first to get tax_inclusive setting
 		await posSettingsStore.loadSettings(shiftStore.profileName)
 		// Load tax rules with tax_inclusive setting
-		await cartStore.loadTaxRules(shiftStore.profileName, posSettingsStore.settings)
+		await cartStore.loadTaxRules(
+			shiftStore.profileName,
+			posSettingsStore.settings,
+		)
 	}
 	showSuccess(__("You can now start making sales"))
 }
@@ -1370,13 +1396,26 @@ function handleItemSelected(item, autoAdd = false) {
 	// Check stock availability first (before any dialogs)
 	// Skip validation for batch/serial items - they have their own validation in the dialog
 	// Product Bundles have calculated stock based on component availability
-	if (settingsStore.shouldEnforceStockValidation() && (item.is_stock_item || item.is_bundle) && !item.has_serial_no && !item.has_batch_no) {
+	if (
+		settingsStore.shouldEnforceStockValidation() &&
+		(item.is_stock_item || item.is_bundle) &&
+		!item.has_serial_no &&
+		!item.has_batch_no
+	) {
 		const actualQty = Math.floor(item.actual_qty ?? item.stock_qty ?? 0)
 
 		if (actualQty <= 0) {
-			showError(item.is_bundle
-			 ? __('"{0}" cannot be added to cart. Bundle is out of stock. Allow Negative Stock is disabled.', [item.item_name])
-			 : __('"{0}" cannot be added to cart. Item is out of stock. Allow Negative Stock is disabled.', [item.item_name]))
+			showError(
+				item.is_bundle
+					? __(
+							'"{0}" cannot be added to cart. Bundle is out of stock. Allow Negative Stock is disabled.',
+							[item.item_name],
+						)
+					: __(
+							'"{0}" cannot be added to cart. Item is out of stock. Allow Negative Stock is disabled.',
+							[item.item_name],
+						),
+			)
 			return
 		}
 	}
@@ -1430,7 +1469,7 @@ function handleCustomerSelected(selectedCustomer) {
 	if (selectedCustomer) {
 		cartStore.setCustomer(selectedCustomer)
 		uiStore.showCustomerDialog = false
-		showSuccess(__('{0} selected', [selectedCustomer.customer_name]))
+		showSuccess(__("{0} selected", [selectedCustomer.customer_name]))
 
 		if (pendingPaymentAfterCustomer.value) {
 			pendingPaymentAfterCustomer.value = false
@@ -1535,7 +1574,11 @@ async function handlePaymentCompleted(paymentData) {
 			}
 
 			await offlineStore.saveInvoiceOffline(invoiceData)
-			uiStore.showSuccess(`OFFLINE-${Date.now()}`, cartStore.grandTotal, paymentData.paid_amount)
+			uiStore.showSuccess(
+				`OFFLINE-${Date.now()}`,
+				cartStore.grandTotal,
+				paymentData.paid_amount,
+			)
 			uiStore.showPaymentDialog = false
 			cartStore.clearCart()
 			// Reset cart hash after successful payment
@@ -1549,12 +1592,12 @@ async function handlePaymentCompleted(paymentData) {
 			showSuccess(__("Invoice saved offline. Will sync when online"))
 		} else {
 			// Get item codes from cart before clearing
-			const soldItemCodes = cartStore.invoiceItems.map(item => item.item_code)
+			const soldItemCodes = cartStore.invoiceItems.map((item) => item.item_code)
 
 			const result = await cartStore.submitInvoice()
 
 			if (result) {
-				const invoiceName = result.name || result.message?.name || __('Unknown')
+				const invoiceName = result.name || result.message?.name || __("Unknown")
 				const invoiceTotal = result.grand_total || result.total || 0
 				const paidAmount = paymentData.paid_amount || invoiceTotal
 
@@ -1574,14 +1617,18 @@ async function handlePaymentCompleted(paymentData) {
 				if (shiftStore.autoPrintEnabled) {
 					try {
 						await handlePrintInvoice({ name: invoiceName })
-						showSuccess(__('Invoice {0} created and sent to printer', [invoiceName]))
+						showSuccess(
+							__("Invoice {0} created and sent to printer", [invoiceName]),
+						)
 					} catch (error) {
 						log.error("Auto-print error:", error)
-						showWarning(__('Invoice {0} created but print failed', [invoiceName]))
+						showWarning(
+							__("Invoice {0} created but print failed", [invoiceName]),
+						)
 					}
 				} else {
 					uiStore.showSuccess(invoiceName, invoiceTotal, paidAmount)
-					showSuccess(__('Invoice {0} created successfully', [invoiceName]))
+					showSuccess(__("Invoice {0} created successfully", [invoiceName]))
 				}
 			}
 		}
@@ -1591,7 +1638,7 @@ async function handlePaymentCompleted(paymentData) {
 
 		const errorContext = parseError(error)
 		uiStore.showError(
-			errorContext.title || __('Error'),
+			errorContext.title || __("Error"),
 			errorContext.message || __("An unexpected error occurred"),
 			errorContext.technicalDetails || null,
 			errorContext.retryable ? "payment" : null,
@@ -1638,10 +1685,15 @@ async function handleOptionSelected(option) {
 				uiStore.showBatchSerialDialog = true
 			} else {
 				try {
-					cartStore.addItem(variant, cartStore.pendingItemQty, false, shiftStore.currentProfile)
+					cartStore.addItem(
+						variant,
+						cartStore.pendingItemQty,
+						false,
+						shiftStore.currentProfile,
+					)
 					uiStore.showItemSelectionDialog = false
 					cartStore.clearPendingItem()
-					showSuccess(__('{0} added to cart', [variant.item_name]))
+					showSuccess(__("{0} added to cart", [variant.item_name]))
 				} catch (error) {
 					showError(error.message)
 				}
@@ -1673,7 +1725,9 @@ async function handleOptionSelected(option) {
 					cartStore.addItem(itemToAdd, qty, false, shiftStore.currentProfile)
 					uiStore.showItemSelectionDialog = false
 					cartStore.clearPendingItem()
-					showSuccess(__('{0} ({1}) added to cart', [itemToAdd.item_name, option.uom]))
+					showSuccess(
+						__("{0} ({1}) added to cart", [itemToAdd.item_name, option.uom]),
+					)
 				} catch (error) {
 					showError(error.message)
 				}
@@ -1737,7 +1791,11 @@ async function handleLoadDraft(draft) {
 			)
 
 			if (!saved) {
-				showError(__("Failed to save current cart. Draft loading cancelled to prevent data loss."))
+				showError(
+					__(
+						"Failed to save current cart. Draft loading cancelled to prevent data loss.",
+					),
+				)
 				return
 			}
 			// No need to clear here as we're about to overwrite cart contents
@@ -1768,7 +1826,9 @@ async function handleLoadDraft(draft) {
 }
 
 function handleReturnCreated(returnInvoice) {
-	showSuccess(__('Return invoice {0} created successfully', [returnInvoice.name]))
+	showSuccess(
+		__("Return invoice {0} created successfully", [returnInvoice.name]),
+	)
 }
 
 function handleDiscountApplied(discount) {
@@ -1811,18 +1871,18 @@ function handleBatchSerialSelected(batchSerial) {
 
 function handleCreateReturnFromHistory(invoice) {
 	uiStore.showReturnDialog = true
-	showWarning(__('Creating return for invoice {0}', [invoice.name]))
+	showWarning(__("Creating return for invoice {0}", [invoice.name]))
 }
 
 function handleCustomerCreated(newCustomer) {
 	cartStore.setCustomer(newCustomer)
 	uiStore.showCreateCustomerDialog = false
-	showSuccess(__('{0} created and selected', [newCustomer.customer_name]))
+	showSuccess(__("{0} created and selected", [newCustomer.customer_name]))
 }
 
 async function handleRefresh() {
 	try {
-		log.info('Manual stock refresh initiated')
+		log.info("Manual stock refresh initiated")
 
 		// Refresh stock from server
 		// Note: refresh() now preserves reservations internally
@@ -1832,9 +1892,9 @@ async function handleRefresh() {
 		const stats = await offlineWorker.getCacheStats()
 		itemStore.cacheStats = stats
 
-		log.success('Manual stock refresh completed')
+		log.success("Manual stock refresh completed")
 	} catch (error) {
-		log.error('Manual stock refresh failed:', error)
+		log.error("Manual stock refresh failed:", error)
 	}
 }
 
@@ -1845,25 +1905,27 @@ function handleClearCache() {
 async function confirmClearCache() {
 	try {
 		// Keep overlay open to show clearing animation
-		log.info('Clearing cached data...')
+		log.info("Clearing cached data...")
 
 		// Import the clear functions from db.js
-		const { clearCachedData, clearBrowserCache } = await import('@/utils/offline/db.js')
+		const { clearCachedData, clearBrowserCache } = await import(
+			"@/utils/offline/db.js"
+		)
 
 		// Clear IndexedDB cache (preserves invoices, drafts, and settings by default)
 		const dbResult = await clearCachedData({
 			preserveInvoices: true,
 			preserveDrafts: true,
-			preserveSettings: true
+			preserveSettings: true,
 		})
 
 		// Clear browser localStorage and sessionStorage
 		const browserResult = clearBrowserCache()
 
 		if (dbResult.success && browserResult.success) {
-			log.success('Cache cleared successfully', {
+			log.success("Cache cleared successfully", {
 				db: dbResult.cleared,
-				browser: browserResult.cleared
+				browser: browserResult.cleared,
 			})
 
 			// Invalidate item store cache
@@ -1889,10 +1951,10 @@ async function confirmClearCache() {
 
 			showSuccess(__("All cached data has been cleared successfully"))
 		} else {
-			throw new Error('Failed to clear cache completely')
+			throw new Error("Failed to clear cache completely")
 		}
 	} catch (error) {
-		log.error('Error clearing cache:', error)
+		log.error("Error clearing cache:", error)
 
 		// Close overlay on error
 		showClearCacheDialog.value = false
@@ -1918,7 +1980,12 @@ async function handleEditOfflineInvoice(invoice) {
 			for (const item of invoiceData.items) {
 				// Use autoAdd=true to skip stock validation when loading saved invoices
 				// Check both quantity and qty fields since items are stored with 'quantity'
-				cartStore.addItem(item, item.quantity || item.qty || 1, true, shiftStore.currentProfile)
+				cartStore.addItem(
+					item,
+					item.quantity || item.qty || 1,
+					true,
+					shiftStore.currentProfile,
+				)
 			}
 		}
 
@@ -1984,13 +2051,17 @@ async function handleSyncAll() {
 
 			uiStore.showError(
 				errorContext.title,
-				__("Failed to sync invoice for {0}\n\n${1}\n\nYou can delete this invoice from the offline queue if you don't need it.", [firstError.customer, errorContext.message]),
-				errorContext.technicalDetails || __('Invoice ID: {0}', [firstError.invoiceId]),
+				__(
+					"Failed to sync invoice for {0}\n\n${1}\n\nYou can delete this invoice from the offline queue if you don't need it.",
+					[firstError.customer, errorContext.message],
+				),
+				errorContext.technicalDetails ||
+					__("Invoice ID: {0}", [firstError.invoiceId]),
 				"sync",
 				{ failedInvoiceId: firstError.invoiceId },
 			)
 		} else if (result.failed > 0) {
-			showWarning(__('{0} invoice(s) failed to sync', [result.failed]))
+			showWarning(__("{0} invoice(s) failed to sync", [result.failed]))
 		}
 	} catch (error) {
 		log.error("Sync error:", error)
@@ -2150,7 +2221,11 @@ async function loadInvoiceHistoryData() {
 		})
 
 		invoiceHistoryData.value = result || []
-		log.info("Loaded invoice history:", invoiceHistoryData.value.length, "invoices")
+		log.info(
+			"Loaded invoice history:",
+			invoiceHistoryData.value.length,
+			"invoices",
+		)
 	} catch (error) {
 		log.error("Error loading invoice history:", error)
 		invoiceHistoryData.value = []
@@ -2211,10 +2286,16 @@ async function handleWarehouseChanged(newWarehouse) {
 			await itemsSelectorRef.value.loadItems()
 		}
 
-		showSuccess(__('Switched to {0}. Stock quantities refreshed.', [newWarehouse]))
+		showSuccess(
+			__("Switched to {0}. Stock quantities refreshed.", [newWarehouse]),
+		)
 	} catch (error) {
 		log.error("Error handling warehouse change:", error)
-		showWarning(__('Warehouse updated but failed to reload stock. Please refresh manually.'))
+		showWarning(
+			__(
+				"Warehouse updated but failed to reload stock. Please refresh manually.",
+			),
+		)
 	}
 }
 

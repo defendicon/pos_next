@@ -933,7 +933,7 @@ const savePromotionResource = createResource({
 	},
 	onError(error) {
 		loading.value = false
-		handleError(error, __('Failed to create promotion'))
+		handleError(error, __("Failed to create promotion"))
 	},
 })
 
@@ -1178,14 +1178,16 @@ function handleSubmit() {
 		)
 		if (duplicate) {
 			showWarning(
-				__('Promotion "{0}" already exists. Please use a different name.', [form.value.name])
+				__('Promotion "{0}" already exists. Please use a different name.', [
+					form.value.name,
+				]),
 			)
 			return
 		}
 	}
 
 	if (form.value.apply_on !== "Transaction" && form.value.items.length === 0) {
-		showWarning(__('`Please select at least one {0}`', [form.value.apply_on]))
+		showWarning(__("`Please select at least one {0}`", [form.value.apply_on]))
 		return
 	}
 

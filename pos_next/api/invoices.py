@@ -347,7 +347,7 @@ def update_invoice(data):
             pos_profile_doc.company if pos_profile_doc else None
         )
 
-        if company and invoice_doc.get("payments"):
+        if company and invoice_doc.get("payments") and doctype == "Sales Invoice":
             for payment in invoice_doc.payments:
                 mode_of_payment = payment.get("mode_of_payment")
                 if mode_of_payment and not payment.get("account"):
@@ -429,8 +429,9 @@ def update_invoice(data):
             # prevents rounding issues and ensures UI matches invoice
 
         # Set invoice flags BEFORE calculations
-        invoice_doc.is_pos = 1
-        invoice_doc.update_stock = 1
+        if doctype == "Sales Invoice":
+            invoice_doc.is_pos = 1
+            invoice_doc.update_stock = 1
 
         # ========================================================================
         # ROUNDING CONFIGURATION
@@ -480,15 +481,17 @@ def update_invoice(data):
 
         # For return invoices, ensure payments are negative
         if invoice_doc.get("is_return"):
-            for payment in invoice_doc.payments:
-                payment.amount = -abs(payment.amount)
-                if payment.base_amount:
-                    payment.base_amount = -abs(payment.base_amount)
+            # Return handling is primarily for Sales Invoice
+            if doctype == "Sales Invoice" and invoice_doc.get("payments"):
+                for payment in invoice_doc.payments:
+                    payment.amount = -abs(payment.amount)
+                    if payment.base_amount:
+                        payment.base_amount = -abs(payment.base_amount)
 
-            invoice_doc.paid_amount = flt(sum(p.amount for p in invoice_doc.payments))
-            invoice_doc.base_paid_amount = flt(
-                sum(p.base_amount or 0 for p in invoice_doc.payments)
-            )
+                invoice_doc.paid_amount = flt(sum(p.amount for p in invoice_doc.payments))
+                invoice_doc.base_paid_amount = flt(
+                    sum(p.base_amount or 0 for p in invoice_doc.payments)
+                )
 
         # Validate and track POS Coupon if coupon_code is provided
         coupon_code = data.get("coupon_code")
@@ -572,8 +575,9 @@ def submit_invoice(invoice=None, data=None):
             invoice_doc = frappe.get_doc(doctype, invoice_name)
             invoice_doc.update(invoice)
 
-        # Ensure update_stock is set
-        invoice_doc.update_stock = 1
+        # Ensure update_stock is set for Sales Invoice
+        if doctype == "Sales Invoice":
+            invoice_doc.update_stock = 1
 
         # Copy accounting dimensions from POS Profile if not already set
         if pos_profile and not invoice_doc.get("branch"):
@@ -589,8 +593,7 @@ def submit_invoice(invoice=None, data=None):
                 pass  # Branch is optional, continue without it
 
         # Set accounts for all payment methods before saving
-        # Set accounts for all payment methods before saving
-        if hasattr(invoice_doc, "payments"):
+        if doctype == "Sales Invoice" and hasattr(invoice_doc, "payments"):
             for payment in invoice_doc.payments:
                 if payment.mode_of_payment:
                     account_info = get_payment_account(

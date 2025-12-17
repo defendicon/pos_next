@@ -109,6 +109,12 @@ def get_pos_settings(pos_profile):
 		frappe.db.get_single_value("Stock Settings", "allow_negative_stock") or 0
 	)
 
+	# Fetch Allow Rate Change from POS Profile
+	# This setting exists in standard POS Profile but not in POS Settings
+	settings["allow_rate_change"] = cint(
+		frappe.db.get_value("POS Profile", pos_profile, "allow_rate_change") or 0
+	)
+
 	return settings
 
 

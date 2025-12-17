@@ -53,6 +53,7 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 		// Miscellaneous
 		input_qty: 0,
 		allow_negative_stock: 0,
+		allow_rate_change: 0, // Inherited from POS Profile
 		// Sales Persons
 		enable_sales_persons: "Disabled",
 	})
@@ -177,6 +178,9 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 	const inputQty = computed(() => Boolean(settings.value.input_qty))
 	const allowNegativeStock = computed(() =>
 		Boolean(settings.value.allow_negative_stock),
+	)
+	const allowRateChange = computed(() =>
+		Boolean(settings.value.allow_rate_change),
 	)
 
 	// Computed - Sales Persons
@@ -404,6 +408,7 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 		// Computed - Miscellaneous
 		inputQty,
 		allowNegativeStock,
+		allowRateChange,
 
 		// Computed - Sales Persons
 		enableSalesPersons,

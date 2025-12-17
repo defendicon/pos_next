@@ -307,6 +307,11 @@
 												:description="__('Show discounts as percentages')"
 											/>
 											<CheckboxField
+												v-model="settings.allow_user_to_edit_rate"
+												:label="__('Allow User to Edit Rate')"
+												:description="__('Allow user to edit item rate in cart')"
+											/>
+											<CheckboxField
 												v-model="settings.allow_user_to_edit_additional_discount"
 												:label="__('Allow Additional Discount')"
 												:description="__('Enable invoice-level discount')"
@@ -424,6 +429,7 @@ const settings = ref({
 	// Core Settings
 	max_discount_allowed: 0,
 	use_percentage_discount: 0,
+	allow_user_to_edit_rate: 0,
 	allow_user_to_edit_additional_discount: 0,
 	allow_user_to_edit_item_discount: 1,
 	disable_rounded_total: 1,

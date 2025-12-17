@@ -95,8 +95,14 @@
 									type="number"
 									min="0"
 									step="0.01"
-									readonly
-									class="w-full h-10 border border-gray-300 rounded-lg ps-16 pe-3 text-sm font-semibold bg-gray-50 cursor-not-allowed"
+									:readonly="!settingsStore.allowRateChange"
+									:class="[
+										'w-full h-10 border border-gray-300 rounded-lg ps-16 pe-3 text-sm font-semibold',
+										settingsStore.allowRateChange
+											? 'bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+											: 'bg-gray-50 cursor-not-allowed'
+									]"
+									@input="calculateTotals"
 								/>
 							</div>
 						</div>

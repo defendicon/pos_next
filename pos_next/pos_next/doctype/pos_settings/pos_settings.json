@@ -38,6 +38,7 @@
   "allow_print_draft_invoices",
   "section_break_pricing",
   "decimal_precision",
+  "allow_user_to_edit_rate",
   "tax_inclusive",
   "section_break_customer",
   "allow_customer_purchase_order",
@@ -289,6 +290,13 @@
    "label": "Decimal Precision",
    "options": "2\n3\n4\n5\n6",
    "description": "Number of decimal places for amounts"
+  },
+  {
+   "default": "0",
+   "fieldname": "allow_user_to_edit_rate",
+   "fieldtype": "Check",
+   "label": "Allow User to Edit Rate",
+   "description": "Allow user to edit item rate in cart"
   },
   {
    "default": "0",

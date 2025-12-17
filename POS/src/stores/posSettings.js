@@ -34,6 +34,7 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 		allow_print_draft_invoices: 0,
 		// Pricing & Display
 		decimal_precision: "2",
+		allow_user_to_edit_rate: 0,
 		// Customer Settings
 		allow_customer_purchase_order: 0,
 		allow_duplicate_customer_names: 0,
@@ -131,6 +132,9 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 	// Computed - Pricing & Display
 	const decimalPrecision = computed(
 		() => Number.parseInt(settings.value.decimal_precision) || 2,
+	)
+	const allowRateChange = computed(() =>
+		Boolean(settings.value.allow_user_to_edit_rate),
 	)
 
 	// Computed - Customer Settings
@@ -274,6 +278,7 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 			allow_free_batch_return: 0,
 			allow_print_draft_invoices: 0,
 			decimal_precision: "2",
+			allow_user_to_edit_rate: 0,
 			allow_customer_purchase_order: 0,
 			allow_duplicate_customer_names: 0,
 			fetch_coupon: 0,
@@ -380,6 +385,7 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 
 		// Computed - Pricing & Display
 		decimalPrecision,
+		allowRateChange,
 
 		// Computed - Customer Settings
 		allowCustomerPurchaseOrder,

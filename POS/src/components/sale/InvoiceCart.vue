@@ -940,9 +940,31 @@
 									</div>
 
 									<!-- Price -->
-									<span class="text-[10px] sm:text-xs font-bold text-gray-700">
-										{{ formatCurrency(item.rate) }}
-									</span>
+									<div class="relative group/rate min-w-[50px] text-end">
+										<div v-if="editingRateKey === `${item.item_code}-${item.uom}`">
+											<input
+												:ref="(el) => setRateInputRef(el, `${item.item_code}-${item.uom}`)"
+												:value="item.rate"
+												@blur="handleRateBlur(item, $event)"
+												@keydown.enter="$event.target.blur()"
+												type="number"
+												step="0.01"
+												class="w-16 h-6 sm:h-7 text-center bg-white border border-blue-500 rounded text-[10px] sm:text-xs font-bold text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+												@click.stop
+											/>
+										</div>
+										<span
+											v-else
+											@click.stop="startEditingRate(item)"
+											:class="[
+												'text-[10px] sm:text-xs font-bold text-gray-700',
+												settingsStore.allowRateChange ? 'cursor-pointer hover:text-blue-600 hover:underline decoration-dashed decoration-gray-400 decoration-1 underline-offset-2' : ''
+											]"
+											:title="settingsStore.allowRateChange ? __('Click to edit rate') : ''"
+										>
+											{{ formatCurrency(item.rate) }}
+										</span>
+									</div>
 								</div>
 
 								<!-- Item Total -->
@@ -1223,6 +1245,10 @@ const selectedItem = ref(null); // Item being edited
 
 // UOM dropdown state - tracks which item's UOM dropdown is open (by item_code)
 const openUomDropdown = ref(null);
+
+// Rate editing state
+const editingRateKey = ref(null); // format: `${item_code}-${uom}`
+const rateInputRefs = ref({});
 
 /**
  * ============================================================================
@@ -1690,6 +1716,45 @@ async function selectUom(item, newUom) {
 	await cartStore.changeItemUOM(item.item_code, newUom, currentUom);
 	openUomDropdown.value = null;
 	emit("update-uom", item.item_code, newUom);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rate Editing Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+function setRateInputRef(el, key) {
+	if (el) {
+		rateInputRefs.value[key] = el;
+	}
+}
+
+function startEditingRate(item) {
+	if (!settingsStore.allowRateChange) return;
+
+	const key = `${item.item_code}-${item.uom}`;
+	editingRateKey.value = key;
+
+	nextTick(() => {
+		const input = rateInputRefs.value[key];
+		if (input) {
+			input.focus();
+			input.select();
+		}
+	});
+}
+
+async function handleRateBlur(item, event) {
+	const newRate = parseFloat(event.target.value);
+	editingRateKey.value = null;
+
+	if (!isNaN(newRate) && newRate >= 0 && newRate !== item.rate) {
+		const originalUom = item.uom || item.stock_uom;
+		// Use store method to update item
+		await cartStore.updateItemDetails(item.item_code, { rate: newRate }, originalUom);
+	} else if (isNaN(newRate) || newRate < 0) {
+		// Reset to original value if invalid
+		event.target.value = item.rate;
+	}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

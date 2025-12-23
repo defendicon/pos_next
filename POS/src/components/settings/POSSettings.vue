@@ -317,6 +317,7 @@
 												:description="__('Enable item-level discount in edit dialog')"
 											/>
 											<CheckboxField
+												v-if="!settings._hide_allow_user_to_edit_rate"
 												v-model="settings.allow_user_to_edit_rate"
 												:label="__('Allow Rate Edit')"
 												:description="__('Enable manually editing item rate/price in cart')"
@@ -432,6 +433,7 @@ const settings = ref({
 	allow_user_to_edit_additional_discount: 0,
 	allow_user_to_edit_item_discount: 1,
 	allow_user_to_edit_rate: 0,
+	_hide_allow_user_to_edit_rate: 0,
 	disable_rounded_total: 1,
 	allow_credit_sale: 0,
 	allow_return: 0,

@@ -109,6 +109,11 @@ def get_pos_settings(pos_profile):
 		frappe.db.get_single_value("Stock Settings", "allow_negative_stock") or 0
 	)
 
+	# Check field metadata for visibility (handles Property Setters)
+	meta = frappe.get_meta("POS Settings")
+	rate_field = meta.get_field("allow_user_to_edit_rate")
+	settings["_hide_allow_user_to_edit_rate"] = 1 if (rate_field and rate_field.hidden) else 0
+
 	return settings
 
 

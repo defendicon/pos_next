@@ -95,8 +95,10 @@
 									type="number"
 									min="0"
 									step="0.01"
-									readonly
-									class="w-full h-10 border border-gray-300 rounded-lg ps-16 pe-3 text-sm font-semibold bg-gray-50 cursor-not-allowed"
+									:readonly="!settingsStore.allowUserToEditRate"
+									class="w-full h-10 border border-gray-300 rounded-lg ps-16 pe-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+									:class="settingsStore.allowUserToEditRate ? 'bg-white' : 'bg-gray-50 cursor-not-allowed'"
+									@input="calculateTotals"
 								/>
 							</div>
 						</div>
@@ -526,6 +528,7 @@ function updateItem() {
 		quantity: localQuantity.value,
 		uom: localUom.value,
 		rate: localRate.value,
+		price_list_rate: localRate.value,
 		warehouse: localWarehouse.value,
 		discount_percentage:
 			discountType.value === "percentage" ? discountValue.value : 0,

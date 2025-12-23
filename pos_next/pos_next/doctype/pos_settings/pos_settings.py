@@ -112,7 +112,12 @@ def get_pos_settings(pos_profile):
 	# Check field metadata for visibility (handles Property Setters)
 	meta = frappe.get_meta("POS Settings")
 	rate_field = meta.get_field("allow_user_to_edit_rate")
-	settings["_hide_allow_user_to_edit_rate"] = 1 if (rate_field and rate_field.hidden) else 0
+	
+	# Hide if field is hidden in meta OR if the value is 0 (disabled)
+	is_hidden = 1 if (rate_field and rate_field.hidden) else 0
+	is_disabled = 1 if not cint(settings.get("allow_user_to_edit_rate")) else 0
+	
+	settings["_hide_allow_user_to_edit_rate"] = 1 if (is_hidden or is_disabled) else 0
 
 	return settings
 

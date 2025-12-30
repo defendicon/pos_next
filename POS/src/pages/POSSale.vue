@@ -485,6 +485,7 @@
 			<ReturnInvoiceDialog
 				v-model="uiStore.showReturnDialog"
 				:pos-profile="shiftStore.profileName"
+				:pos-opening-shift="shiftStore.currentShift?.name"
 				:currency="shiftStore.profileCurrency"
 				@return-created="handleReturnCreated"
 			/>

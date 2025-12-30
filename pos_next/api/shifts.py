@@ -153,15 +153,11 @@ def get_closing_shift_data(opening_shift):
 		opening_shift_dict = opening_shift_doc.as_dict()
 		opening_shift_json = json.dumps(opening_shift_dict, default=str)
 
-		# Create closing shift from opening shift
+		# Create closing shift from opening shift (returns a dict)
 		closing_data = make_closing_shift_from_opening(opening_shift_json)
 
-		# Convert the result to a serializable dict using frappe's as_dict which handles datetime
-		if hasattr(closing_data, 'as_dict'):
-			result = closing_data.as_dict()
-			# Ensure all values are JSON serializable by converting to JSON and back
-			return json.loads(json.dumps(result, default=str))
-		return closing_data
+		# Ensure datetime values are JSON serializable
+		return json.loads(json.dumps(closing_data, default=str))
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Get Closing Shift Data Error")
 		frappe.throw(_("Error getting closing shift data: {0}").format(str(e)))

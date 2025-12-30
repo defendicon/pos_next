@@ -408,162 +408,172 @@ def get_payments_entries(pos_opening_shift):
     )
 
 
+def _get_cash_mode_of_payment(pos_profile):
+    """Get the cash mode of payment for a POS profile."""
+    cash_mode = frappe.get_value("POS Profile", pos_profile, "posa_cash_mode_of_payment")
+    return cash_mode or "Cash"
+
+
+def _aggregate_payment(payments, mode_of_payment, amount, opening_amount=0):
+    """Add or update payment amount for a mode of payment."""
+    for pay in payments:
+        if pay.mode_of_payment == mode_of_payment:
+            pay.expected_amount += flt(amount)
+            return
+    payments.append(frappe._dict({
+        "mode_of_payment": mode_of_payment,
+        "opening_amount": opening_amount,
+        "expected_amount": flt(amount) + opening_amount,
+    }))
+
+
+def _aggregate_tax(taxes, account_head, rate, amount):
+    """Add or update tax amount for an account."""
+    for tax in taxes:
+        if tax.account_head == account_head and tax.rate == rate:
+            tax.amount += amount
+            return
+    taxes.append(frappe._dict({
+        "account_head": account_head,
+        "rate": rate,
+        "amount": amount,
+    }))
+
+
+def _process_invoice(invoice, invoice_field, company_currency, cash_mode, payments, taxes, summary):
+    """Process a single invoice and update aggregates."""
+    conversion_rate = invoice.get("conversion_rate")
+    is_return = invoice.get("is_return", 0)
+
+    base_grand_total = get_base_value(invoice, "grand_total", "base_grand_total", conversion_rate)
+    base_net_total = get_base_value(invoice, "net_total", "base_net_total", conversion_rate)
+
+    # Build transaction record
+    transaction = frappe._dict({
+        invoice_field: invoice.name,
+        "posting_date": invoice.posting_date,
+        "grand_total": base_grand_total,
+        "transaction_currency": invoice.get("currency") or company_currency,
+        "transaction_amount": flt(invoice.get("grand_total")),
+        "customer": invoice.customer,
+        "is_return": is_return,
+        "return_against": invoice.get("return_against") if is_return else None,
+    })
+
+    # Update summary totals
+    summary["grand_total"] += base_grand_total
+    summary["net_total"] += base_net_total
+    summary["total_quantity"] += flt(invoice.total_qty)
+
+    if is_return:
+        summary["returns_total"] += abs(base_grand_total)
+        summary["returns_count"] += 1
+    else:
+        summary["sales_total"] += base_grand_total
+        summary["sales_count"] += 1
+
+    # Process taxes
+    for t in invoice.taxes:
+        tax_amount = get_base_value(t, "tax_amount", "base_tax_amount", conversion_rate)
+        _aggregate_tax(taxes, t.account_head, t.rate, tax_amount)
+
+    # Process payments
+    for p in invoice.payments:
+        amount = get_base_value(p, "amount", "base_amount", conversion_rate)
+        if p.mode_of_payment == cash_mode:
+            amount -= get_base_value(invoice, "change_amount", "base_change_amount", conversion_rate)
+        _aggregate_payment(payments, p.mode_of_payment, amount)
+
+    return transaction
+
+
 @frappe.whitelist()
 def make_closing_shift_from_opening(opening_shift):
     opening_shift = json.loads(opening_shift)
-    use_pos_invoice = False
-    doctype = "POS Invoice" if use_pos_invoice else "Sales Invoice"
+    doctype = "Sales Invoice"
+    invoice_field = "sales_invoice"
+
     submit_printed_invoices(opening_shift.get("name"), doctype)
+
+    # Initialize closing shift document
     closing_shift = frappe.new_doc("POS Closing Shift")
-    closing_shift.pos_opening_shift = opening_shift.get("name")
-    closing_shift.period_start_date = opening_shift.get("period_start_date")
-    closing_shift.period_end_date = frappe.utils.get_datetime()
-    closing_shift.pos_profile = opening_shift.get("pos_profile")
-    closing_shift.user = opening_shift.get("user")
-    closing_shift.company = opening_shift.get("company")
-    closing_shift.grand_total = 0
-    closing_shift.net_total = 0
-    closing_shift.total_quantity = 0
+    closing_shift.update({
+        "pos_opening_shift": opening_shift.get("name"),
+        "period_start_date": opening_shift.get("period_start_date"),
+        "period_end_date": frappe.utils.get_datetime(),
+        "pos_profile": opening_shift.get("pos_profile"),
+        "user": opening_shift.get("user"),
+        "company": opening_shift.get("company"),
+    })
 
-    company_currency = frappe.get_cached_value(
-        "Company", closing_shift.company, "default_currency"
-    )
+    company_currency = frappe.get_cached_value("Company", closing_shift.company, "default_currency")
+    cash_mode = _get_cash_mode_of_payment(opening_shift.get("pos_profile"))
 
-    invoices = get_pos_invoices(opening_shift.get("name"), doctype)
-
-    pos_transactions = []
-    taxes = []
+    # Initialize collections
     payments = []
+    taxes = []
+    pos_transactions = []
+
+    # Summary for tracking totals
+    summary = {
+        "grand_total": 0, "net_total": 0, "total_quantity": 0,
+        "returns_total": 0, "returns_count": 0,
+        "sales_total": 0, "sales_count": 0,
+    }
+
+    # Add opening balances to payments
+    for detail in opening_shift.get("balance_details", []):
+        opening_amount = flt(detail.get("amount"))
+        payments.append(frappe._dict({
+            "mode_of_payment": detail.get("mode_of_payment"),
+            "opening_amount": opening_amount,
+            "expected_amount": opening_amount,
+        }))
+
+    # Process invoices
+    invoices = get_pos_invoices(opening_shift.get("name"), doctype)
+    for invoice in invoices:
+        txn = _process_invoice(invoice, invoice_field, company_currency, cash_mode, payments, taxes, summary)
+        pos_transactions.append(txn)
+
+    # Process payment entries
     pos_payments_table = []
-    for detail in opening_shift.get("balance_details"):
-        payments.append(
-            frappe._dict(
-                {
-                    "mode_of_payment": detail.get("mode_of_payment"),
-                    "opening_amount": detail.get("amount") or 0,
-                    "expected_amount": detail.get("amount") or 0,
-                }
-            )
-        )
+    for py in get_payments_entries(opening_shift.get("name")):
+        pos_payments_table.append(frappe._dict({
+            "payment_entry": py.name,
+            "mode_of_payment": py.mode_of_payment,
+            "paid_amount": py.paid_amount,
+            "posting_date": py.posting_date,
+            "customer": py.party,
+        }))
+        amount = get_base_value(py, "paid_amount", "base_paid_amount")
+        _aggregate_payment(payments, py.mode_of_payment, amount)
 
-    invoice_field = "pos_invoice" if doctype == "POS Invoice" else "sales_invoice"
+    # Update closing shift with totals
+    closing_shift.grand_total = summary["grand_total"]
+    closing_shift.net_total = summary["net_total"]
+    closing_shift.total_quantity = summary["total_quantity"]
 
-    for d in invoices:
-        conversion_rate = d.get("conversion_rate")
-        pos_transactions.append(
-            frappe._dict(
-                {
-                    invoice_field: d.name,
-                    "posting_date": d.posting_date,
-                    "grand_total": get_base_value(
-                        d, "grand_total", "base_grand_total", conversion_rate
-                    ),
-                    "transaction_currency": d.get("currency") or company_currency,
-                    "transaction_amount": flt(d.get("grand_total")),
-                    "customer": d.customer,
-                }
-            )
-        )
-        base_grand_total = get_base_value(
-            d, "grand_total", "base_grand_total", conversion_rate
-        )
-        base_net_total = get_base_value(d, "net_total", "base_net_total", conversion_rate)
-        closing_shift.grand_total += base_grand_total
-        closing_shift.net_total += base_net_total
-        closing_shift.total_quantity += flt(d.total_qty)
-
-        for t in d.taxes:
-            existing_tax = [
-                tx for tx in taxes if tx.account_head == t.account_head and tx.rate == t.rate
-            ]
-            if existing_tax:
-                existing_tax[0].amount += get_base_value(
-                    t, "tax_amount", "base_tax_amount", d.get("conversion_rate")
-                )
-            else:
-                taxes.append(
-                    frappe._dict(
-                        {
-                            "account_head": t.account_head,
-                            "rate": t.rate,
-                            "amount": get_base_value(
-                                t, "tax_amount", "base_tax_amount", d.get("conversion_rate")
-                            ),
-                        }
-                    )
-                )
-
-        for p in d.payments:
-            existing_pay = [pay for pay in payments if pay.mode_of_payment == p.mode_of_payment]
-            if existing_pay:
-                cash_mode_of_payment = frappe.get_value(
-                    "POS Profile",
-                    opening_shift.get("pos_profile"),
-                    "posa_cash_mode_of_payment",
-                )
-                if not cash_mode_of_payment:
-                    cash_mode_of_payment = "Cash"
-                conversion_rate = d.get("conversion_rate")
-                if existing_pay[0].mode_of_payment == cash_mode_of_payment:
-                    amount = get_base_value(p, "amount", "base_amount", conversion_rate) - get_base_value(
-                        d, "change_amount", "base_change_amount", conversion_rate
-                    )
-                else:
-                    amount = get_base_value(
-                        p, "amount", "base_amount", conversion_rate
-                    )
-                existing_pay[0].expected_amount += flt(amount)
-            else:
-                payments.append(
-                    frappe._dict(
-                        {
-                            "mode_of_payment": p.mode_of_payment,
-                            "opening_amount": 0,
-                            "expected_amount": get_base_value(
-                                p, "amount", "base_amount", d.get("conversion_rate")
-                            ),
-                        }
-                    )
-                )
-
-    pos_payments = get_payments_entries(opening_shift.get("name"))
-
-    for py in pos_payments:
-        pos_payments_table.append(
-            frappe._dict(
-                {
-                    "payment_entry": py.name,
-                    "mode_of_payment": py.mode_of_payment,
-                    "paid_amount": py.paid_amount,
-                    "posting_date": py.posting_date,
-                    "customer": py.party,
-                }
-            )
-        )
-        existing_pay = [pay for pay in payments if pay.mode_of_payment == py.mode_of_payment]
-        if existing_pay:
-            existing_pay[0].expected_amount += get_base_value(
-                py, "paid_amount", "base_paid_amount"
-            )
-        else:
-            payments.append(
-                frappe._dict(
-                    {
-                        "mode_of_payment": py.mode_of_payment,
-                        "opening_amount": 0,
-                        "expected_amount": get_base_value(
-                            py, "paid_amount", "base_paid_amount"
-                        ),
-                    }
-                )
-            )
-
-    closing_shift.set("pos_transactions", pos_transactions)
+    # Set child tables (without return info - that's for display only)
+    closing_shift.set("pos_transactions", [
+        {k: v for k, v in txn.items() if k not in ("is_return", "return_against")}
+        for txn in pos_transactions
+    ])
     closing_shift.set("payment_reconciliation", payments)
     closing_shift.set("taxes", taxes)
     closing_shift.set("pos_payments", pos_payments_table)
 
-    return closing_shift
+    # Build response with display-only fields
+    result = closing_shift.as_dict()
+    result.update({
+        "returns_total": summary["returns_total"],
+        "returns_count": summary["returns_count"],
+        "sales_total": summary["sales_total"],
+        "sales_count": summary["sales_count"],
+        "pos_transactions": pos_transactions,  # Include return info for display
+    })
+
+    return result
 
 
 @frappe.whitelist()

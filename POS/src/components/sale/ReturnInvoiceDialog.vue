@@ -571,6 +571,7 @@ const { showSuccess, showError, showWarning } = useToast()
 const props = defineProps({
 	modelValue: Boolean,
 	posProfile: String,
+	posOpeningShift: String,
 	currency: {
 		type: String,
 		default: "USD",
@@ -723,6 +724,7 @@ const createReturnResource = createResource({
 		const invoiceData = {
 			doctype: "Sales Invoice",
 			pos_profile: props.posProfile,
+			posa_pos_opening_shift: props.posOpeningShift,
 			customer: originalInvoice.value.customer,
 			company: originalInvoice.value.company,
 			is_return: 1,
@@ -826,6 +828,8 @@ const selectedItems = computed(() => {
 	)
 })
 
+const hasOpenShift = computed(() => Boolean(props.posOpeningShift))
+
 const returnTotal = computed(() => {
 	if (!selectedItems.value || !Array.isArray(selectedItems.value)) {
 		return 0
@@ -881,6 +885,9 @@ const canCreateReturn = computed(() => {
 		return false
 	}
 	const hasSelectedItems = selectedItems.value.length > 0
+	if (!hasOpenShift.value) {
+		return false
+	}
 
 	// For credit sales (Pay on Account), no payment validation needed
 	// The return will simply reverse the A/R entry
@@ -1161,6 +1168,12 @@ function decrementQty(item) {
 
 async function handleCreateReturn() {
 	if (!canCreateReturn.value || isSubmitting.value) return
+	if (!hasOpenShift.value) {
+		const message = __("Open a shift before creating a return invoice.")
+		submitError.value = message
+		openErrorDialog(message)
+		return
+	}
 
 	if (!validateSelectedItems()) {
 		return

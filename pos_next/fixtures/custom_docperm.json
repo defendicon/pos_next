@@ -310,5 +310,29 @@
   "share": 0,
   "submit": 0,
   "write": 0
+ },
+ {
+  "amend": 0,
+  "cancel": 0,
+  "create": 1,
+  "delete": 0,
+  "docstatus": 0,
+  "doctype": "Custom DocPerm",
+  "email": 0,
+  "export": 0,
+  "if_owner": 0,
+  "import": 0,
+  "modified": "2025-12-30 12:00:00.000000",
+  "name": "offline_invoice_sync_perm_posnext",
+  "parent": "Offline Invoice Sync",
+  "permlevel": 0,
+  "print": 0,
+  "read": 1,
+  "report": 1,
+  "role": "POSNext Cashier",
+  "select": 1,
+  "share": 0,
+  "submit": 0,
+  "write": 1
  }
 ]

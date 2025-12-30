@@ -525,6 +525,41 @@ def update_invoice(data):
 
 
 @frappe.whitelist()
+def check_offline_invoice_synced(offline_id):
+    """
+    Check if an offline invoice has already been synced.
+
+    This endpoint is called by the frontend before attempting to sync
+    an offline invoice, preventing duplicate submissions.
+
+    Args:
+        offline_id: The unique offline ID to check
+
+    Returns:
+        dict with 'synced' (bool) and 'sales_invoice' (str or None)
+    """
+    from pos_next.pos_next.doctype.offline_invoice_sync.offline_invoice_sync import (
+        OfflineInvoiceSync,
+    )
+
+    result = OfflineInvoiceSync.is_synced(offline_id)
+
+    # Additionally verify the sales invoice still exists and is submitted
+    if result.get("synced") and result.get("sales_invoice"):
+        if frappe.db.exists("Sales Invoice", result["sales_invoice"]):
+            docstatus = frappe.db.get_value(
+                "Sales Invoice", result["sales_invoice"], "docstatus"
+            )
+            if docstatus == 1:  # Submitted
+                return result
+
+        # Invoice was deleted or not submitted, clear the sync record
+        return {"synced": False, "sales_invoice": None}
+
+    return result
+
+
+@frappe.whitelist()
 def submit_invoice(invoice=None, data=None):
     """Submit the invoice (Step 2)."""
     try:
@@ -563,6 +598,44 @@ def submit_invoice(invoice=None, data=None):
 
         pos_profile = invoice.get("pos_profile")
         doctype = invoice.get("doctype", "Sales Invoice")
+
+        # ========================================================================
+        # OFFLINE INVOICE DEDUPLICATION CHECK
+        # ========================================================================
+        # If this is an offline invoice with an offline_id, check if it was
+        # already synced. This prevents duplicate invoices from being created
+        # when network failures occur during sync.
+        # ========================================================================
+        offline_id = invoice.get("offline_id") or data.get("offline_id")
+        if offline_id:
+            existing_sync = frappe.db.get_value(
+                "Offline Invoice Sync",
+                {"offline_id": offline_id},
+                ["name", "sales_invoice"],
+                as_dict=True
+            )
+            if existing_sync:
+                # Check if the Sales Invoice still exists and is valid
+                if frappe.db.exists("Sales Invoice", existing_sync.sales_invoice):
+                    existing_doc = frappe.get_doc("Sales Invoice", existing_sync.sales_invoice)
+                    if existing_doc.docstatus == 1:  # Submitted
+                        # Return the existing invoice details instead of creating a duplicate
+                        frappe.log_error(
+                            title="Duplicate Offline Invoice Prevented",
+                            message=f"Offline ID {offline_id} already synced as {existing_sync.sales_invoice}"
+                        )
+                        return {
+                            "name": existing_doc.name,
+                            "status": existing_doc.docstatus,
+                            "grand_total": existing_doc.grand_total,
+                            "total": existing_doc.total,
+                            "net_total": existing_doc.net_total,
+                            "outstanding_amount": getattr(existing_doc, "outstanding_amount", 0),
+                            "paid_amount": getattr(existing_doc, "paid_amount", 0),
+                            "change_amount": getattr(existing_doc, "change_amount", 0),
+                            "duplicate_prevented": True,
+                            "offline_id": offline_id,
+                        }
 
         invoice_name = invoice.get("name")
 
@@ -682,6 +755,31 @@ def submit_invoice(invoice=None, data=None):
             # Re-raise the original submission error
             raise submit_error
 
+        # ========================================================================
+        # RECORD OFFLINE INVOICE SYNC
+        # ========================================================================
+        # After successful submission, create a tracking record to prevent
+        # duplicate syncs if the client retries due to network failure.
+        # ========================================================================
+        if offline_id:
+            try:
+                from pos_next.pos_next.doctype.offline_invoice_sync.offline_invoice_sync import (
+                    OfflineInvoiceSync,
+                )
+                OfflineInvoiceSync.create_sync_record(
+                    offline_id=offline_id,
+                    sales_invoice=invoice_doc.name,
+                    pos_profile=pos_profile,
+                    customer=invoice_doc.customer,
+                )
+                frappe.db.commit()
+            except Exception as sync_track_error:
+                # Log but don't fail the invoice submission
+                frappe.log_error(
+                    title="Offline Sync Tracking Error",
+                    message=f"Failed to track offline_id {offline_id} for invoice {invoice_doc.name}: {str(sync_track_error)}"
+                )
+
         # Handle credit redemption after successful submission
         customer_credit_dict = data.get("customer_credit_dict") or invoice.get("customer_credit_dict")
         redeemed_customer_credit = data.get("redeemed_customer_credit") or invoice.get("redeemed_customer_credit")
@@ -703,7 +801,7 @@ def submit_invoice(invoice=None, data=None):
                 )
 
         # Return complete invoice details
-        return {
+        result = {
             "name": invoice_doc.name,
             "status": invoice_doc.docstatus,
             "grand_total": invoice_doc.grand_total,
@@ -713,6 +811,12 @@ def submit_invoice(invoice=None, data=None):
             "paid_amount": getattr(invoice_doc, "paid_amount", 0),
             "change_amount": getattr(invoice_doc, "change_amount", 0),
         }
+
+        # Include offline_id in response for client-side tracking
+        if offline_id:
+            result["offline_id"] = offline_id
+
+        return result
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Submit Invoice Error")
         raise

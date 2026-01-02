@@ -1,15 +1,23 @@
 <template>
 	<Dialog v-model="show" :options="{ title: isSalesOrder ? __('Complete Sales Order') : __('Complete Payment'), size: dynamicDialogSize }">
 		<template #body-content>
-			<!-- Two Column Layout - constrained to viewport height -->
+			<!-- Two Column Layout - auto-sized on mobile, constrained on desktop -->
 			<div
-				:class="['grid grid-cols-1 lg:grid-cols-5 items-stretch overflow-hidden', dynamicGap]"
-				:style="{ maxHeight: dialogContentMaxHeight }"
+				:class="[
+					'grid grid-cols-1 lg:grid-cols-5 items-stretch',
+					dynamicGap,
+					isMobileView ? '' : 'overflow-hidden'
+				]"
+				:style="isMobileView ? {} : { maxHeight: dialogContentMaxHeight }"
 			>
 				<!-- Left Column (2/5): Sales Person + Invoice Summary -->
 				<div
-					class="lg:col-span-2 flex flex-col gap-1.5 min-h-0 overflow-hidden"
-					:style="{ maxHeight: dynamicLeftColumnHeight }"
+					:class="[
+						'lg:col-span-2 flex flex-col min-h-0',
+						isSmallMobile ? 'gap-1' : 'gap-1.5',
+						isMobileView ? 'overflow-visible' : 'overflow-hidden'
+					]"
+					:style="{ maxHeight: isMobileView ? 'none' : dynamicLeftColumnHeight }"
 				>
 					<!-- Delivery Date for Sales Orders -->
 					<div v-if="isSalesOrder" class="bg-orange-50 border border-orange-200 rounded-lg p-2">
@@ -293,30 +301,33 @@
 				<!-- Right Column (3/5): Payment Methods + Quick Amounts + Numpad -->
 				<div
 					ref="rightColumnRef"
-					:class="['lg:col-span-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-col', 'p-2 lg:p-3']"
-					:style="{ minHeight: rightColumnMinHeight }"
+					:class="[
+						'lg:col-span-3 bg-gray-50 rounded-lg border border-gray-200 flex flex-col',
+						isSmallMobile ? 'p-1.5' : 'p-2 lg:p-3'
+					]"
+					:style="isMobileView ? {} : { minHeight: rightColumnMinHeight }"
 				>
 					<!-- Payment Methods -->
-					<div class="mb-1.5 lg:mb-3">
-						<div class="flex items-center justify-between mb-1 lg:mb-2">
-							<div class="text-start text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ __('Payment Method') }}</div>
+					<div :class="isSmallMobile ? 'mb-1' : 'mb-1.5 lg:mb-3'">
+						<div :class="['flex items-center justify-between', isSmallMobile ? 'mb-0.5' : 'mb-1 lg:mb-2']">
+							<div :class="['text-start font-semibold text-gray-500 uppercase tracking-wide', isSmallMobile ? 'text-[10px]' : 'text-xs']">{{ __('Payment Method') }}</div>
 							<!-- Clear All Payments Button -->
 							<button
 								v-if="paymentEntries.length > 0"
 								@click="clearAll"
-								class="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+								:class="['text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors', isSmallMobile ? 'p-1' : 'p-1.5']"
 								:title="__('Clear all payments')"
 							>
-								<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg :class="isSmallMobile ? 'w-4 h-4' : 'w-5 h-5'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
 								</svg>
 							</button>
 						</div>
 						<div v-if="loadingPaymentMethods" class="flex items-center gap-2">
-							<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
-							<span class="text-sm text-gray-500">{{ __('Loading...') }}</span>
+							<div :class="['animate-spin rounded-full border-b-2 border-blue-500', isSmallMobile ? 'h-4 w-4' : 'h-5 w-5']"></div>
+							<span :class="['text-gray-500', isSmallMobile ? 'text-xs' : 'text-sm']">{{ __('Loading...') }}</span>
 						</div>
-						<div v-else-if="filteredPaymentMethods.length > 0" class="flex flex-wrap gap-1.5 lg:gap-2">
+						<div v-else-if="filteredPaymentMethods.length > 0" :class="['flex flex-wrap', isSmallMobile ? 'gap-1' : 'gap-1.5 lg:gap-2']">
 							<button
 								v-for="method in filteredPaymentMethods"
 								:key="method.mode_of_payment"
@@ -326,8 +337,8 @@
 								@pointercancel="onPaymentMethodCancel"
 								:disabled="isWalletPaymentMethod(method.mode_of_payment) && availableWalletBalance <= 0 && getMethodTotal(method.mode_of_payment) === 0"
 								:class="[
-									'inline-flex items-center gap-1 lg:gap-2 px-2.5 lg:px-4 rounded-lg border-2 transition-all font-medium select-none touch-none',
-									'h-8 text-xs lg:h-11 lg:text-sm',
+									'inline-flex items-center rounded-lg border-2 transition-all font-medium select-none touch-none',
+									isSmallMobile ? 'gap-0.5 px-1.5 h-7 text-[10px]' : 'gap-1 lg:gap-2 px-2.5 lg:px-4 h-8 text-xs lg:h-11 lg:text-sm',
 									lastSelectedMethod?.mode_of_payment === method.mode_of_payment
 										? isWalletPaymentMethod(method.mode_of_payment)
 											? 'border-amber-500 bg-amber-50 text-amber-700'
@@ -339,16 +350,16 @@
 											: 'border-gray-200 bg-white hover:border-blue-400 hover:bg-blue-50 text-gray-700'
 								]"
 							>
-								<span class="text-sm lg:text-lg">{{ isWalletPaymentMethod(method.mode_of_payment) ? '🎁' : getPaymentIcon(method.type) }}</span>
-								<span>{{ __(method.mode_of_payment) }}</span>
+								<span :class="isSmallMobile ? 'text-xs' : 'text-sm lg:text-lg'">{{ isWalletPaymentMethod(method.mode_of_payment) ? '🎁' : getPaymentIcon(method.type) }}</span>
+								<span class="truncate max-w-[80px] lg:max-w-none">{{ __(method.mode_of_payment) }}</span>
 								<!-- Wallet Balance Badge -->
-								<span v-if="isWalletPaymentMethod(method.mode_of_payment) && walletInfo.wallet_enabled" class="text-[10px] font-bold px-1.5 py-0.5 rounded"
-									:class="availableWalletBalance > 0 ? 'text-amber-700 bg-amber-100' : 'text-gray-500 bg-gray-200'">
+								<span v-if="isWalletPaymentMethod(method.mode_of_payment) && walletInfo.wallet_enabled"
+									:class="['font-bold rounded', isSmallMobile ? 'text-[8px] px-1 py-0.5' : 'text-[10px] px-1.5 py-0.5', availableWalletBalance > 0 ? 'text-amber-700 bg-amber-100' : 'text-gray-500 bg-gray-200']">
 									{{ formatCurrency(availableWalletBalance) }}
 								</span>
 								<!-- Payment Amount Badge -->
-								<span v-if="getMethodTotal(method.mode_of_payment) > 0" class="text-xs font-bold px-1 py-0.5 rounded"
-									:class="isWalletPaymentMethod(method.mode_of_payment) ? 'text-amber-600 bg-amber-200' : 'text-blue-600 bg-blue-100'">
+								<span v-if="getMethodTotal(method.mode_of_payment) > 0"
+									:class="['font-bold rounded', isSmallMobile ? 'text-[8px] px-0.5 py-0.5' : 'text-xs px-1 py-0.5', isWalletPaymentMethod(method.mode_of_payment) ? 'text-amber-600 bg-amber-200' : 'text-blue-600 bg-blue-100']">
 									{{ formatCurrency(getMethodTotal(method.mode_of_payment)) }}
 								</span>
 							</button>
@@ -358,22 +369,23 @@
 								@click="applyCustomerCredit"
 								:disabled="remainingAmount === 0 || remainingAvailableCredit === 0"
 								:class="[
-									'inline-flex items-center gap-1 lg:gap-2 px-2.5 lg:px-4 rounded-lg border-2 transition-all font-medium',
-									'h-8 text-xs lg:h-11 lg:text-sm',
+									'inline-flex items-center rounded-lg border-2 transition-all font-medium',
+									isSmallMobile ? 'gap-0.5 px-1.5 h-7 text-[10px]' : 'gap-1 lg:gap-2 px-2.5 lg:px-4 h-8 text-xs lg:h-11 lg:text-sm',
 									remainingAmount === 0 || remainingAvailableCredit === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
 									getMethodTotal('Customer Credit') > 0
 										? 'border-emerald-500 bg-emerald-50 text-emerald-700'
 										: 'border-emerald-300 bg-emerald-50 hover:border-emerald-500 hover:bg-emerald-100 text-emerald-700'
 								]"
 							>
-								<span class="text-sm lg:text-lg">💳</span>
-								<span>{{ __('Credit Balance') }}</span>
-								<span v-if="getMethodTotal('Customer Credit') > 0" class="text-xs font-bold text-emerald-600 bg-emerald-100 px-1 py-0.5 rounded">
+								<span :class="isSmallMobile ? 'text-xs' : 'text-sm lg:text-lg'">💳</span>
+								<span class="truncate">{{ __('Credit Balance') }}</span>
+								<span v-if="getMethodTotal('Customer Credit') > 0"
+									:class="['font-bold text-emerald-600 bg-emerald-100 rounded', isSmallMobile ? 'text-[8px] px-0.5 py-0.5' : 'text-xs px-1 py-0.5']">
 									{{ formatCurrency(getMethodTotal('Customer Credit')) }}
 								</span>
 							</button>
 						</div>
-						<div v-else class="text-sm text-gray-500">{{ __('No payment methods available') }}</div>
+						<div v-else :class="['text-gray-500', isSmallMobile ? 'text-xs' : 'text-sm']">{{ __('No payment methods available') }}</div>
 					</div>
 
 					<!-- Quick Amounts Area (Desktop) -->
@@ -399,26 +411,32 @@
 						<p class="text-xs text-blue-600">{{ __('Select a payment method to start') }}</p>
 					</div>
 
-					<!-- Mobile Payment Section - Compact & Clear -->
-					<div class="lg:hidden">
+					<!-- Mobile Payment Section - Dynamic & Responsive -->
+					<div class="lg:hidden flex flex-col" :class="isSmallMobile ? 'gap-1' : 'gap-1.5'">
 						<!-- Mobile Quick Amounts + Custom Input -->
-						<div v-if="lastSelectedMethod && remainingAmount > 0" class="space-y-1.5 mb-2">
-							<!-- Quick Amounts Row (4 columns, compact) -->
-							<div class="grid grid-cols-4 gap-1">
+						<div v-if="lastSelectedMethod && remainingAmount > 0" :class="['space-y-1 flex-shrink-0', isSmallMobile ? 'mb-1' : 'mb-1.5']">
+							<!-- Quick Amounts Row (4 columns, responsive sizing) -->
+							<div class="grid grid-cols-4" :class="isSmallMobile ? 'gap-0.5' : 'gap-1'">
 								<button
 									v-for="amount in quickAmounts"
 									:key="amount"
 									@click="addCustomPayment(lastSelectedMethod, amount)"
-									class="py-1.5 text-xs font-semibold rounded bg-white border border-gray-200 text-gray-700 active:bg-blue-50 active:border-blue-400"
+									:class="[
+										'font-semibold rounded bg-white border border-gray-200 text-gray-700 active:bg-blue-50 active:border-blue-400 transition-colors',
+										isSmallMobile ? 'py-1 text-[10px]' : 'py-1.5 text-xs'
+									]"
 								>
 									{{ formatCurrency(amount) }}
 								</button>
 							</div>
 
 							<!-- Custom Amount Row -->
-							<div class="flex gap-1">
+							<div :class="['flex', isSmallMobile ? 'gap-0.5' : 'gap-1']">
 								<div class="relative flex-1">
-									<span class="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">{{ currencySymbol }}</span>
+									<span :class="[
+										'absolute start-2 top-1/2 -translate-y-1/2 text-gray-400',
+										isSmallMobile ? 'text-[10px]' : 'text-xs'
+									]">{{ currencySymbol }}</span>
 									<input
 										v-model="mobileCustomAmount"
 										type="number"
@@ -426,14 +444,18 @@
 										:placeholder="__('Custom')"
 										min="0"
 										step="0.01"
-										class="w-full h-8 ps-6 pe-2 text-sm font-semibold border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+										:class="[
+											'w-full border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white font-semibold',
+											isSmallMobile ? 'h-7 ps-5 pe-1.5 text-xs' : 'h-8 ps-6 pe-2 text-sm'
+										]"
 									/>
 								</div>
 								<button
 									@click="addMobileCustomPayment"
 									:disabled="!mobileCustomAmount || mobileCustomAmount <= 0"
 									:class="[
-										'h-8 px-3 text-xs font-semibold rounded transition-all',
+										'font-semibold rounded transition-all flex-shrink-0',
+										isSmallMobile ? 'h-7 px-2 text-[10px]' : 'h-8 px-3 text-xs',
 										!mobileCustomAmount || mobileCustomAmount <= 0
 											? 'bg-gray-100 text-gray-400'
 											: 'bg-blue-500 text-white active:bg-blue-600'
@@ -445,33 +467,41 @@
 						</div>
 
 						<!-- Mobile: Select payment method prompt -->
-						<div v-else-if="!lastSelectedMethod && remainingAmount > 0" class="bg-blue-50 rounded text-center p-2 mb-2">
-							<p class="text-xs text-blue-600">{{ __('Select a payment method') }}</p>
+						<div v-else-if="!lastSelectedMethod && remainingAmount > 0"
+							:class="['bg-blue-50 rounded text-center', isSmallMobile ? 'p-1.5 mb-1' : 'p-2 mb-1.5']">
+							<p :class="isSmallMobile ? 'text-[10px]' : 'text-xs'" class="text-blue-600">{{ __('Select a payment method') }}</p>
 						</div>
 
-						<!-- Mobile Action Buttons -->
-						<div class="space-y-1.5">
+						<!-- Mobile Action Buttons - Always visible at bottom -->
+						<div :class="['flex-shrink-0', isSmallMobile ? 'space-y-1' : 'space-y-1.5']">
 							<!-- Two buttons side by side when both needed -->
-							<div v-if="lastSelectedMethod && remainingAmount > 0 && allowCreditSale && paymentEntries.length === 0" class="grid grid-cols-2 gap-1.5">
+							<div v-if="lastSelectedMethod && remainingAmount > 0 && allowCreditSale && paymentEntries.length === 0"
+								class="grid grid-cols-2" :class="isSmallMobile ? 'gap-1' : 'gap-1.5'">
 								<!-- Pay Full Amount Button -->
 								<button
 									@click="addCustomPayment(lastSelectedMethod, remainingAmount)"
-									class="h-10 text-sm font-bold rounded-lg bg-green-500 text-white active:bg-green-600 flex items-center justify-center gap-1"
+									:class="[
+										'font-bold rounded-lg bg-green-500 text-white active:bg-green-600 flex items-center justify-center',
+										mobileButtonSize.height, mobileButtonSize.text, mobileButtonSize.gap
+									]"
 								>
-									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<svg :class="mobileButtonSize.icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
 									</svg>
-									<span>{{ formatCurrency(remainingAmount) }}</span>
+									<span class="truncate">{{ formatCurrency(remainingAmount) }}</span>
 								</button>
 								<!-- Pay on Account Button -->
 								<button
 									@click="addCreditAccountPayment"
-									class="h-10 text-sm font-semibold rounded-lg bg-orange-500 text-white active:bg-orange-600 flex items-center justify-center gap-1"
+									:class="[
+										'font-semibold rounded-lg bg-orange-500 text-white active:bg-orange-600 flex items-center justify-center',
+										mobileButtonSize.height, mobileButtonSize.text, mobileButtonSize.gap
+									]"
 								>
-									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<svg :class="mobileButtonSize.icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
 									</svg>
-									<span>{{ __('On Account') }}</span>
+									<span class="truncate">{{ __('On Account') }}</span>
 								</button>
 							</div>
 
@@ -479,9 +509,12 @@
 							<button
 								v-else-if="lastSelectedMethod && remainingAmount > 0"
 								@click="addCustomPayment(lastSelectedMethod, remainingAmount)"
-								class="w-full h-10 text-sm font-bold rounded-lg bg-green-500 text-white active:bg-green-600 flex items-center justify-center gap-2"
+								:class="[
+									'w-full font-bold rounded-lg bg-green-500 text-white active:bg-green-600 flex items-center justify-center',
+									mobileButtonSize.height, mobileButtonSize.text, mobileButtonSize.gap
+								]"
 							>
-								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg :class="mobileButtonSize.icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
 								</svg>
 								<span>{{ __('Pay') }} {{ formatCurrency(remainingAmount) }}</span>
@@ -491,9 +524,12 @@
 							<button
 								v-if="remainingAmount === 0 && totalPaid > 0"
 								@click="completePayment"
-								class="w-full h-10 text-sm font-bold rounded-lg bg-blue-500 text-white active:bg-blue-600 flex items-center justify-center gap-2"
+								:class="[
+									'w-full font-bold rounded-lg bg-blue-500 text-white active:bg-blue-600 flex items-center justify-center',
+									mobileButtonSize.height, mobileButtonSize.text, mobileButtonSize.gap
+								]"
 							>
-								<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+								<svg :class="mobileButtonSize.icon" fill="currentColor" viewBox="0 0 20 20">
 									<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
 								</svg>
 								<span>{{ __('Complete Payment') }}</span>
@@ -769,21 +805,26 @@ onUnmounted(() => {
 const dynamicDialogSize = computed(() => {
 	const width = viewportWidth.value
 	if (width < 640) return 'full' // Mobile: full screen
+	if (width < 768) return 'full' // Small tablet: full screen for better usability
 	if (width < 1024) return '4xl' // Tablet
 	if (width < 1280) return '5xl' // Small desktop
 	return '6xl' // Large desktop
 })
 
+// Check if we're on a mobile device (for mobile-specific behavior)
+const isMobileView = computed(() => viewportWidth.value < 1024)
+
 // Dynamic content max height based on viewport
 const dialogContentMaxHeight = computed(() => {
 	const height = viewportHeight.value
-	// Reserve space for dialog header (~60px) and padding (~40px)
-	const availableHeight = height - 100
-	// On mobile, use more of the screen
-	if (viewportWidth.value < 640) {
-		return `${Math.max(400, availableHeight)}px`
+	const width = viewportWidth.value
+
+	// On mobile, don't set max-height - let content determine size
+	if (width < 1024) {
+		return 'none'
 	}
-	// On tablet/desktop, cap at reasonable max
+	// Desktop: use fixed pixel calculation
+	const availableHeight = height - 100
 	return `${Math.min(Math.max(500, availableHeight), height - 80)}px`
 })
 
@@ -802,26 +843,99 @@ const dynamicLeftColumnHeight = computed(() => {
 // Check if we're in compact mode (small screens)
 const isCompactMode = computed(() => viewportHeight.value < 700 || viewportWidth.value < 1024)
 
+// Check if we're on a very small mobile screen
+const isSmallMobile = computed(() => viewportWidth.value < 360 || viewportHeight.value < 600)
+
 // Dynamic gap and padding based on screen size
 const dynamicGap = computed(() => {
+	if (viewportWidth.value < 360) return 'gap-1' // Very small phones
 	if (viewportWidth.value < 640) return 'gap-1.5'
 	if (viewportWidth.value < 1024) return 'gap-2'
 	return 'gap-3'
 })
 
 // Dynamic text sizes
-const dynamicTextSize = computed(() => ({
-	header: viewportWidth.value < 640 ? 'text-xs' : 'text-sm',
-	body: viewportWidth.value < 640 ? 'text-xs' : 'text-sm',
-	amount: viewportWidth.value < 640 ? 'text-lg' : viewportHeight.value < 700 ? 'text-lg' : 'text-xl',
-	grandTotal: viewportWidth.value < 640 ? 'text-lg' : viewportHeight.value < 700 ? 'text-xl' : 'text-2xl',
-}))
+const dynamicTextSize = computed(() => {
+	const width = viewportWidth.value
+	const height = viewportHeight.value
+
+	// Very small phones
+	if (width < 360 || height < 550) {
+		return {
+			header: 'text-[10px]',
+			body: 'text-[10px]',
+			amount: 'text-base',
+			grandTotal: 'text-base',
+		}
+	}
+	// Small phones
+	if (width < 640) {
+		return {
+			header: 'text-xs',
+			body: 'text-xs',
+			amount: 'text-lg',
+			grandTotal: 'text-lg',
+		}
+	}
+	// Tablet and small height screens
+	if (height < 700) {
+		return {
+			header: 'text-sm',
+			body: 'text-sm',
+			amount: 'text-lg',
+			grandTotal: 'text-xl',
+		}
+	}
+	// Default desktop
+	return {
+		header: 'text-sm',
+		body: 'text-sm',
+		amount: 'text-xl',
+		grandTotal: 'text-2xl',
+	}
+})
 
 // Dynamic button heights
 const dynamicButtonHeight = computed(() => {
-	if (viewportWidth.value < 640) return 'h-10'
-	if (viewportHeight.value < 700) return 'h-10'
+	const width = viewportWidth.value
+	const height = viewportHeight.value
+
+	// Very small phones - smaller buttons
+	if (width < 360 || height < 550) return 'h-9'
+	// Small phones
+	if (width < 640) return 'h-10'
+	// Short screens
+	if (height < 700) return 'h-10'
 	return 'h-12'
+})
+
+// Mobile action button sizing
+const mobileButtonSize = computed(() => {
+	const width = viewportWidth.value
+	const height = viewportHeight.value
+
+	if (width < 360 || height < 550) {
+		return {
+			height: 'h-9',
+			text: 'text-xs',
+			icon: 'w-3.5 h-3.5',
+			gap: 'gap-1',
+		}
+	}
+	if (width < 640) {
+		return {
+			height: 'h-10',
+			text: 'text-sm',
+			icon: 'w-4 h-4',
+			gap: 'gap-1.5',
+		}
+	}
+	return {
+		height: 'h-11',
+		text: 'text-sm',
+		icon: 'w-4 h-4',
+		gap: 'gap-2',
+	}
 })
 
 // Dynamic numpad key size

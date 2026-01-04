@@ -963,6 +963,16 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 			"ifnull(variant_of, '')": "",  # Exclude items that are variants of a template
 		}
 
+		# Try to resolve weighted/priced barcodes if barcode_resolver is available
+		resolved_barcode_data = None
+		effective_search_term = search_term
+		if search_term and len(search_term.strip().split()) == 1:
+			from pos_next.services.barcode import resolve_barcode
+			resolved_barcode_data = resolve_barcode(search_term.strip())
+			if resolved_barcode_data and resolved_barcode_data.get("item_barcode"):
+				# Use the extracted item barcode for searching
+				effective_search_term = resolved_barcode_data["item_barcode"]
+
 		# IMPORTANT: Filtering logic explained:
 		# - Template items (has_variants=1) are shown → users select variants via dialog
 		# - Regular items (has_variants=0, variant_of is null) are shown → direct add to cart
@@ -988,9 +998,9 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 		])
 
 		# Add search conditions if search term provided
-		if search_term.strip():
+		if effective_search_term and effective_search_term.strip():
 			# Split search term into words for fuzzy matching
-			search_words = [word.strip() for word in search_term.split() if word.strip()]
+			search_words = [word.strip() for word in effective_search_term.split() if word.strip()]
 
 			# Word-order independent: all words must appear somewhere in item fields
 			search_text = "CONCAT(COALESCE(i.name, ''), ' ', COALESCE(i.item_name, ''), ' ', COALESCE(i.description, ''))"
@@ -1002,11 +1012,11 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 			# Combine: match item fields OR match barcode
 			conditions.append(f"(({word_conditions}) OR {barcode_condition})")
 			params.extend([f"%{word}%" for word in search_words])
-			params.append(f"%{search_term}%")  # For barcode matching
+			params.append(f"%{effective_search_term}%")  # For barcode matching
 
 			# Relevance scoring with case-insensitive comparison
 			# Exact barcode match gets highest priority, use MAX() for grouping
-			prefix_pattern = f"{search_term}%"
+			prefix_pattern = f"{effective_search_term}%"
 			relevance = f"""
 				MAX(CASE
 					WHEN ib.barcode = %s THEN 1500
@@ -1018,7 +1028,7 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 					ELSE 100
 				END)
 			"""
-			score_params = [search_term, prefix_pattern, search_term, search_term, prefix_pattern, prefix_pattern]
+			score_params = [effective_search_term, prefix_pattern, effective_search_term, effective_search_term, prefix_pattern, prefix_pattern]
 			order_by = f"{relevance} DESC, i.item_name ASC"
 		else:
 			# No search term - simple ordering
@@ -1273,6 +1283,16 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 
 			# UOM-specific prices map for frontend selector
 			item["uom_prices"] = uom_prices_map.get(item["item_code"], {})
+
+		# Apply resolved barcode data (weighted/priced) to the first matching item
+		if resolved_barcode_data and items:
+			from pos_next.services.barcode import compute_resolved_item_data
+			resolved_item_data = compute_resolved_item_data(
+				resolved_barcode_data,
+				item_rate=items[0].get("rate", 0),
+			)
+			if resolved_item_data:
+				items[0].update(resolved_item_data)
 
 		return items
 	except Exception as e:

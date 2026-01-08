@@ -3,6 +3,9 @@ import { computed, ref, toRaw } from "vue"
 import { isOffline } from "@/utils/offline"
 import { useSerialNumberStore } from "@/stores/serialNumber"
 import { CoalescingMutex } from "@/utils/mutex"
+import { logger } from "@/utils/logger"
+
+const log = logger.create("Invoice")
 
 
 // Shared mutex for invoice submission across all useInvoice instances
@@ -723,7 +726,7 @@ export function useInvoice() {
 		return await submitMutex.withLock(async () => {
 			// Check if already submitting (belt and suspenders with mutex)
 			if (isSubmitting.value) {
-				console.warn("Invoice submission already in progress, skipping duplicate request")
+				log.warn("Invoice submission already in progress, skipping duplicate request")
 				return null
 			}
 

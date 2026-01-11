@@ -776,12 +776,13 @@
 
 							<!-- Single Row: Quantity Counter, UOM, Price & Total -->
 							<div class="flex items-center justify-between gap-1.5">
-								<div class="flex items-center gap-1.5" @click.stop>
+								<div class="flex items-center gap-1.5">
 									<!-- Quantity Counter -->
 									<!-- For serial items, show serial badge with edit button -->
 									<div
 										v-if="item.has_serial_no && item.serial_no"
 										class="flex items-center gap-1"
+										@click.stop
 									>
 										<!-- Serial count badge -->
 										<div
@@ -810,6 +811,7 @@
 									<div
 										v-else
 										class="flex items-center bg-gray-50 border border-gray-200 rounded overflow-hidden"
+										@click.stop
 									>
 										<button
 											type="button"
@@ -866,7 +868,7 @@
 									</div>
 
 									<!-- UOM Selector Dropdown -->
-									<div class="relative group/uom">
+									<div class="relative group/uom" @click.stop>
 										<button
 											type="button"
 											@click="toggleUomDropdown(item.item_code, item.uom)"

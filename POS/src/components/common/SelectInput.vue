@@ -36,10 +36,9 @@
 				<div
 					v-if="isOpen"
 					ref="dropdownRef"
-					class="fixed bg-white border border-gray-100 rounded-lg shadow-lg flex flex-col"
+					class="fixed bg-white border border-gray-100 rounded-lg shadow-lg flex flex-col dropdown-z-index"
 					:style="dropdownStyle"
 					:class="searchable ? 'max-h-80' : 'max-h-60'"
-					style="z-index: 9999;"
 					role="listbox"
 				>
 					<!-- Search Input (when searchable) -->
@@ -322,3 +321,10 @@ onBeforeUnmount(() => {
 	removeScrollListeners()
 })
 </script>
+
+<style scoped>
+/* Use CSS custom property from index.css for consistent z-index layering */
+.dropdown-z-index {
+	z-index: var(--z-dropdown, 10000);
+}
+</style>

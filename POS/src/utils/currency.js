@@ -103,3 +103,16 @@ export function formatCurrencyNumber(value, locale = "en-US") {
 export function getCurrencyClass(value) {
 	return value < 0 ? "text-red-600" : "text-gray-900"
 }
+
+/**
+ * Round a number to 2 decimal places
+ * Prevents floating point precision issues (e.g., 10.000000000000002)
+ * @param {number} value - The numeric value to round
+ * @returns {number} Rounded value
+ */
+export function round2(value) {
+	if (typeof value !== "number" || isNaN(value)) {
+		return 0
+	}
+	return Math.round(value * 100) / 100
+}

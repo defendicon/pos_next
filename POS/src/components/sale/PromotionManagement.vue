@@ -202,7 +202,7 @@
 										</div>
 										<div class="flex items-center justify-between text-xs">
 											<Badge variant="subtle">
-												{{ promotion.apply_on }}
+												{{ translateApplyOn(promotion.apply_on) }}
 											</Badge>
 											<span class="text-gray-500">
 												{{ promotion.valid_upto ? formatDate(promotion.valid_upto) : __('No expiry') }}
@@ -383,7 +383,7 @@
 											<div class="p-5">
 												<div class="flex items-center gap-2 mb-4">
 													<FeatherIcon name="list" class="w-4 h-4 text-green-600" />
-													<h4 class="text-sm font-semibold text-gray-900">{{ __('Select {0}', [form.apply_on]) }}</h4>
+													<h4 class="text-sm font-semibold text-gray-900">{{ __('Select {0}', [translateApplyOn(form.apply_on)]) }}</h4>
 													<Badge variant="subtle" theme="red" size="sm">{{ __('Required') }}</Badge>
 												</div>
 
@@ -709,6 +709,7 @@
 import { usePOSPermissions } from "@/composables/usePermissions"
 import { useToast } from "@/composables/useToast"
 import { useItemSearchStore } from "@/stores/itemSearch"
+import { __ } from "@/utils/translation"
 import CouponManagement from "./CouponManagement.vue"
 import SelectInput from "../common/SelectInput.vue"
 import {
@@ -867,13 +868,22 @@ const freeItemSearchResults = computed(() => {
 	return filtered.slice(0, 20)
 })
 
+// Single source of truth for apply_on configuration
+// Used by both applyOnOptions dropdown and translateApplyOn function
+const APPLY_ON_CONFIG = {
+	'Item Code': { label: () => __('Specific Items') },
+	'Item Group': { label: () => __('Item Groups') },
+	'Brand': { label: () => __('Brands') },
+	'Transaction': { label: () => __('Entire Transaction') }
+}
+
 // Computed: Options for Apply On dropdown
-const applyOnOptions = computed(() => [
-	{ label: __('Specific Items'), value: 'Item Code' },
-	{ label: __('Item Groups'), value: 'Item Group' },
-	{ label: __('Brands'), value: 'Brand' },
-	{ label: __('Entire Transaction'), value: 'Transaction' }
-])
+const applyOnOptions = computed(() =>
+	Object.entries(APPLY_ON_CONFIG).map(([value, config]) => ({
+		label: config.label(),
+		value
+	}))
+)
 
 // Computed: Options for Item Group dropdown
 const itemGroupOptions = computed(() =>
@@ -1223,7 +1233,7 @@ function handleSubmit() {
 	}
 
 	if (form.value.apply_on !== "Transaction" && form.value.items.length === 0) {
-		showWarning(__('`Please select at least one {0}`', [form.value.apply_on]))
+		showWarning(__('Please select at least one {0}', [translateApplyOn(form.value.apply_on)]))
 		return
 	}
 
@@ -1399,6 +1409,11 @@ function getStatusTheme(status) {
 		default:
 			return "gray"
 	}
+}
+
+// Translate apply_on values for display (uses APPLY_ON_CONFIG for consistency)
+function translateApplyOn(value) {
+	return APPLY_ON_CONFIG[value]?.label() || value
 }
 
 function handleCouponSaved(data) {

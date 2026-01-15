@@ -931,6 +931,7 @@ const createReturnResource = createResource({
 			company: originalInvoice.value.company,
 			is_return: 1,
 			return_against: originalInvoice.value.name,
+			update_outstanding_for_self: 0, // Ensure original invoice outstanding is reduced
 			is_pos: 1,
 			update_stock: 1,
 			items: selectedItems.value.map((item) => ({

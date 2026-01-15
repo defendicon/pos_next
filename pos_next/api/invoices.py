@@ -947,6 +947,13 @@ def submit_invoice(invoice=None, data=None):
         if doctype == "Sales Invoice":
             invoice_doc.update_stock = 1
 
+        # For return invoices, set update_outstanding_for_self = 0
+        # This ensures the GL entry's against_voucher points to the original invoice,
+        # which properly reduces the original invoice's outstanding amount and
+        # sets its status to "Credit Note Issued"
+        if invoice_doc.get("is_return") and invoice_doc.get("return_against"):
+            invoice_doc.update_outstanding_for_self = 0
+
         # Copy accounting dimensions from POS Profile if not already set
         if pos_profile and not invoice_doc.get("branch"):
             try:

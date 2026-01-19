@@ -962,6 +962,7 @@ import { session } from "@/data/session";
 import { useUserData } from "@/data/user";
 import { parseError } from "@/utils/errorHandler";
 import { offlineWorker } from "@/utils/offline/workerClient";
+import { cacheInvoiceHistory, getCachedInvoiceHistory } from "@/utils/offline/sync";
 import { printInvoice, printInvoiceByName } from "@/utils/printInvoice";
 import { Button, Dialog, createResource } from "frappe-ui";
 import { call } from "@/utils/apiWrapper";
@@ -1888,6 +1889,11 @@ async function handlePaymentCompleted(paymentData) {
 				// Refresh stock - Direct API (50-200ms), no Socket.IO lag!
 				await stockStore.refresh(soldItemCodes, shiftStore.profileWarehouse);
 
+				// Refresh invoice history cache in background (non-blocking)
+				loadInvoiceHistoryData().catch((err) =>
+					log.debug("Background invoice cache refresh failed:", err)
+				);
+
 				if (shiftStore.autoPrintEnabled) {
 					try {
 						await handlePrintInvoice({ name: invoiceName });
@@ -2487,6 +2493,22 @@ async function loadInvoiceHistoryData() {
 	// Also reload drafts
 	await draftsStore.loadDrafts();
 
+	// Check if offline - use cached data
+	if (offlineStore.isOffline) {
+		log.info("Offline mode - loading invoice history from cache");
+		try {
+			const cachedInvoices = await getCachedInvoiceHistory(shiftStore.profileName, {
+				limit: 100,
+			});
+			invoiceHistoryData.value = cachedInvoices || [];
+			log.info("Loaded", invoiceHistoryData.value.length, "invoices from offline cache");
+		} catch (error) {
+			log.error("Error loading cached invoice history:", error);
+			invoiceHistoryData.value = [];
+		}
+		return;
+	}
+
 	try {
 		// Use custom API from pos_next.api.invoices
 		const result = await call("pos_next.api.invoices.get_invoices", {
@@ -2496,8 +2518,28 @@ async function loadInvoiceHistoryData() {
 
 		invoiceHistoryData.value = result || [];
 		log.info("Loaded invoice history:", invoiceHistoryData.value.length, "invoices");
+
+		// Cache invoices for offline use
+		if (result && result.length > 0) {
+			cacheInvoiceHistory(result, shiftStore.profileName);
+		}
 	} catch (error) {
 		log.error("Error loading invoice history:", error);
+
+		// Fallback to cached data on error
+		try {
+			const cachedInvoices = await getCachedInvoiceHistory(shiftStore.profileName, {
+				limit: 100,
+			});
+			if (cachedInvoices && cachedInvoices.length > 0) {
+				invoiceHistoryData.value = cachedInvoices;
+				log.info("Loaded", cachedInvoices.length, "invoices from cache (fallback)");
+				return;
+			}
+		} catch (cacheError) {
+			log.error("Error loading fallback cache:", cacheError);
+		}
+
 		invoiceHistoryData.value = [];
 	}
 }

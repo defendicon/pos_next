@@ -70,6 +70,14 @@ const CURRENT_SCHEMA = {
 	// Promotional offers cache for offline use
 	// Indexed by name (unique), filterable by pos_profile
 	offers: "&name, pos_profile, apply_on, valid_upto",
+
+	// Invoice history cache for offline viewing
+	// Stores submitted invoices for offline access
+	invoice_history: "&name, pos_profile, posting_date, customer",
+
+	// Unpaid invoices cache for offline viewing
+	// Stores invoices with outstanding amounts for partial payment management
+	unpaid_invoices: "&name, pos_profile, outstanding_amount, customer",
 }
 
 /**

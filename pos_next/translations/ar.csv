@@ -1418,3 +1418,6 @@
 "Refresh unavailable offline","التحديث غير متاح حالياً",""
 "No connection","لا يوجد اتصال بالشبكة",""
 "Connect to the internet to load invoices","يجب الاتصال بالإنترنت لعرض الفواتير",""
+"You are offline","أنت غير متصل بالإنترنت",""
+"Payments cannot be added while offline. Connect to the internet to add payments.","لا يمكن إضافة مدفوعات أثناء عدم الاتصال. اتصل بالإنترنت لإضافة المدفوعات.",""
+"Payments cannot be added while offline","لا يمكن إضافة مدفوعات أثناء عدم الاتصال",""

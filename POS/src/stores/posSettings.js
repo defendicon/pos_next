@@ -98,11 +98,9 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 	const allowItemDiscount = computed(() =>
 		Boolean(settings.value.allow_user_to_edit_item_discount),
 	)
-	const allowUserToEditRate = computed(() => {
-		const val = Boolean(settings.value.allow_user_to_edit_rate)
-		console.log('[POSSettings] allowUserToEditRate:', val, 'raw:', settings.value.allow_user_to_edit_rate)
-		return val
-	})
+	const allowUserToEditRate = computed(() =>
+		Boolean(settings.value.allow_user_to_edit_rate),
+	)
 	const disableRoundedTotal = computed(() =>
 		Boolean(settings.value.disable_rounded_total),
 	)
@@ -252,12 +250,10 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 		settings.value.pos_profile = posProfile
 
 		// OPTIMIZATION: Check if bootstrap has preloaded the settings
-		/*
 		try {
 			const bootstrapStore = useBootstrapStore()
 			const preloadedSettings = bootstrapStore.getPreloadedPOSSettings()
 			if (preloadedSettings && Object.keys(preloadedSettings).length > 0) {
-				console.log('[POSSettings Store] Using preloaded settings from bootstrap:', preloadedSettings)
 				Object.assign(settings.value, preloadedSettings)
 				isLoaded.value = true
 				isLoading.value = false
@@ -265,9 +261,7 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 			}
 		} catch (error) {
 			// Bootstrap store may not be available, fall through to API call
-			console.log('[POSSettings Store] Bootstrap not available, fetching from API')
 		}
-		*/
 
 		// Fallback to API call
 		try {

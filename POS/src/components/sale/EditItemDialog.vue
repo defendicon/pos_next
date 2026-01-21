@@ -235,9 +235,6 @@ import SelectInput from "@/components/common/SelectInput.vue"
 const { showSuccess, showError, showWarning } = useToast()
 const settingsStore = usePOSSettingsStore()
 const serialStore = useSerialNumberStore()
-watch(() => settingsStore.allowUserToEditRate, (val) => {
-	console.log('EditItemDialog - allowUserToEditRate changed:', val)
-}, { immediate: true })
 
 const props = defineProps({
 	modelValue: Boolean,
@@ -526,17 +523,22 @@ function formatCurrency(amount) {
 }
 
 function updateItem() {
+	// Preserve original price_list_rate for audit trail
+	// Only update rate, not price_list_rate
 	const updatedItem = {
 		...localItem.value,
 		quantity: localQuantity.value,
 		uom: localUom.value,
 		rate: localRate.value,
-		price_list_rate: localRate.value,
+		// Keep original price_list_rate - do NOT overwrite with edited rate
+		// This preserves the original price for discount/margin audit
 		warehouse: localWarehouse.value,
 		discount_percentage:
 			discountType.value === "percentage" ? discountValue.value : 0,
 		discount_amount:
 			discountType.value === "amount" ? discountValue.value : 0,
+		// Flag to track if rate was manually edited
+		is_rate_manually_edited: localRate.value !== localItem.value.price_list_rate,
 	}
 
 	// Update serial numbers if item has serials

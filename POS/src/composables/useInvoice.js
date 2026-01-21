@@ -341,10 +341,11 @@ export function useInvoice() {
 			const oldTax = item.tax_amount || 0
 			const oldDiscount = item.discount_amount || 0
 
-			// Update BOTH rate and price_list_rate to ensure the new rate is used as base
+			// Only update rate, preserve price_list_rate for audit trail
 			const newRate = Number.parseFloat(rate) || 0
 			item.rate = newRate
-			item.price_list_rate = newRate
+			// Do NOT overwrite price_list_rate - keep original for discount/margin tracking
+			item.is_rate_manually_edited = newRate !== item.price_list_rate
 
 			recalculateItem(item)
 

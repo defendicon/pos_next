@@ -1399,6 +1399,9 @@ function addSalesPerson(person) {
 			allocated_percentage: 100,
 			commission_rate: person.commission_rate,
 		}]
+		// Close dropdown after single selection
+		salesPersonSearch.value = ''
+		salesPersonDropdownOpen.value = false
 	} else {
 		// For Multiple mode, add to the list and redistribute evenly
 		selectedSalesPersons.value.push({
@@ -1409,11 +1412,10 @@ function addSalesPerson(person) {
 		})
 		// Redistribute commission evenly among all selected
 		redistributeCommission()
+		// Keep dropdown open for multiple selection, just clear search
+		salesPersonSearch.value = ''
+		// Keep dropdown open so user can continue selecting
 	}
-
-	// Clear search and close dropdown after adding
-	salesPersonSearch.value = ''
-	salesPersonDropdownOpen.value = false
 }
 
 function removeSalesPerson(personName) {

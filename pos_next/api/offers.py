@@ -78,6 +78,14 @@ class Offer:
 	eligible_items: List[str]
 	eligible_item_groups: List[str]
 	eligible_brands: List[str]
+	# Free item fields for product discounts
+	free_item: Optional[str] = None
+	free_qty: float = 0
+	free_item_uom: Optional[str] = None
+	same_item: int = 0  # 1 if free item should be same as purchased item
+	is_recursive: int = 0  # 1 if offer applies recursively (e.g., buy 2 get 1 free for every 2)
+	recurse_for: float = 0  # Give free item for every N quantity (used when is_recursive=1)
+	apply_recursion_over: float = 0  # Qty for which recursion isn't applicable
 
 	def to_dict(self) -> Dict:
 		"""Convert to dictionary for API response"""
@@ -122,16 +130,61 @@ class EligibilityFetcher:
 
 	@staticmethod
 	def _fetch_items(parent_names: List[str]) -> Dict[str, List[str]]:
-		"""Fetch item codes for given parents"""
+		"""
+		Fetch item codes for given parents, expanding template items to include variants.
+
+		When a pricing rule is created for a template item (has_variants=1), this method
+		automatically includes all its variant items in the eligible items list.
+		This ensures offers work correctly when variants are added to cart.
+		"""
 		results = frappe.db.sql("""
 			SELECT parent, item_code
 			FROM `tabPricing Rule Item Code`
 			WHERE parent IN %s
 		""", [parent_names], as_dict=1)
 
+		if not results:
+			return {}
+
+		# Collect all unique item codes
+		all_item_codes = list({row["item_code"] for row in results})
+
+		# Find which items are templates (have variants)
+		template_items = frappe.get_all(
+			"Item",
+			filters={
+				"name": ["in", all_item_codes],
+				"has_variants": 1
+			},
+			pluck="name"
+		)
+
+		# Fetch variants for all template items in one query
+		variants_map = {}
+		if template_items:
+			variants = frappe.get_all(
+				"Item",
+				filters={
+					"variant_of": ["in", template_items],
+					"disabled": 0
+				},
+				fields=["name", "variant_of"]
+			)
+			for variant in variants:
+				variants_map.setdefault(variant["variant_of"], []).append(variant["name"])
+
+		# Build items map, expanding templates to include their variants
 		items_map = {}
 		for row in results:
-			items_map.setdefault(row["parent"], []).append(row["item_code"])
+			parent = row["parent"]
+			item_code = row["item_code"]
+
+			items_map.setdefault(parent, []).append(item_code)
+
+			# If this item is a template, also add all its variants
+			if item_code in variants_map:
+				items_map[parent].extend(variants_map[item_code])
+
 		return items_map
 
 	@staticmethod
@@ -199,7 +252,9 @@ class SlabFetcher:
 		results = frappe.db.sql("""
 			SELECT
 				parent, min_qty, max_qty, min_amount, max_amount,
-				apply_multiple_pricing_rules
+				apply_multiple_pricing_rules,
+				free_item, free_qty, free_item_uom, same_item, is_recursive,
+				recurse_for, apply_recursion_over
 			FROM `tabPromotional Scheme Product Discount`
 			WHERE parent IN %s AND disable = 0
 			ORDER BY parent, min_amount ASC, min_qty ASC
@@ -253,7 +308,7 @@ class OfferBuilder:
 		return Offer(
 			name=rule["name"],
 			title=rule.get("title") or rule.get("promotional_scheme") or rule["name"],
-			description=rule.get("title") or rule.get("promotional_scheme"),
+			description=rule.get("title") or rule.get("promotional_scheme") or "",
 			apply_on=rule["apply_on"],
 			offer="Item Price" if is_price_discount else "Give Product",
 			auto=is_auto,
@@ -273,7 +328,15 @@ class OfferBuilder:
 			promotional_scheme_id=rule.get("promotional_scheme_id"),
 			eligible_items=eligible_items,
 			eligible_item_groups=eligible_item_groups,
-			eligible_brands=eligible_brands
+			eligible_brands=eligible_brands,
+			# Free item fields for product discounts
+			free_item=slab.get("free_item") if not is_price_discount else None,
+			free_qty=flt(slab.get("free_qty", 0)) if not is_price_discount else 0,
+			free_item_uom=slab.get("free_item_uom") if not is_price_discount else None,
+			same_item=1 if slab.get("same_item") and not is_price_discount else 0,
+			is_recursive=1 if slab.get("is_recursive") and not is_price_discount else 0,
+			recurse_for=flt(slab.get("recurse_for", 0)) if not is_price_discount else 0,
+			apply_recursion_over=flt(slab.get("apply_recursion_over", 0)) if not is_price_discount else 0
 		)
 
 	@staticmethod

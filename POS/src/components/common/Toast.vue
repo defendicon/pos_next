@@ -1,6 +1,6 @@
 <template>
 	<Teleport to="body">
-		<Transition name="toast-slide">
+		<Transition :name="isRTL ? 'toast-slide-rtl' : 'toast-slide-ltr'">
 			<div
 				v-if="showToast && toastNotification"
 				class="fixed top-4 end-4 z-[9999] max-w-md"
@@ -68,24 +68,33 @@
 
 <script setup>
 import { useToast } from "@/composables/useToast"
+import { useLocale } from "@/composables/useLocale"
 import { FeatherIcon } from "frappe-ui"
 
 const { toastNotification, showToast, hideToast } = useToast()
+const { isRTL } = useLocale()
 </script>
 
 <style scoped>
-.toast-slide-enter-active,
-.toast-slide-leave-active {
+/* Common transition timing */
+.toast-slide-ltr-enter-active,
+.toast-slide-ltr-leave-active,
+.toast-slide-rtl-enter-active,
+.toast-slide-rtl-leave-active {
 	transition: all 0.3s ease;
 }
 
-.toast-slide-enter-from {
+/* LTR: slide from right (end side) */
+.toast-slide-ltr-enter-from,
+.toast-slide-ltr-leave-to {
 	opacity: 0;
 	transform: translateX(100%);
 }
 
-.toast-slide-leave-to {
+/* RTL: slide from left (end side in RTL) */
+.toast-slide-rtl-enter-from,
+.toast-slide-rtl-leave-to {
 	opacity: 0;
-	transform: translateX(100%);
+	transform: translateX(-100%);
 }
 </style>

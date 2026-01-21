@@ -41,6 +41,7 @@
   "create_only_sales_order",
   "column_break_operations",
   "allow_return_without_invoice",
+  "return_validity_days",
   "allow_free_batch_return",
   "allow_print_draft_invoices",
   "section_break_pricing",
@@ -323,7 +324,14 @@
   },
   {
    "default": "0",
-   "description": "Return items without batch restriction",
+   "fieldname": "return_validity_days",
+   "fieldtype": "Int",
+   "label": "Return Validity Days",
+   "description": "Number of days allowed for invoice returns. Set to 0 for unlimited returns.",
+   "depends_on": "allow_return"
+  },
+  {
+   "default": "0",
    "fieldname": "allow_free_batch_return",
    "fieldtype": "Check",
    "label": "Allow Free Batch Return"

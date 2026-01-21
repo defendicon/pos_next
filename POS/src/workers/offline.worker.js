@@ -974,6 +974,113 @@ async function getCachedPaymentMethods(posProfile) {
 	}
 }
 
+// ============================================================================
+// OFFERS CACHE FUNCTIONS
+// ============================================================================
+
+/**
+ * Cache promotional offers for offline use.
+ * Stores offers by POS Profile for retrieval when offline.
+ *
+ * @param {Array} offers - Array of offer objects from the server
+ * @param {string} posProfile - POS Profile name to associate with offers
+ * @returns {Promise<{success: boolean, count: number}>}
+ */
+async function cacheOffers(offers, posProfile) {
+	try {
+		if (!Array.isArray(offers) || !posProfile) {
+			return { success: false, count: 0 }
+		}
+
+		const db = await initDB()
+
+		// Add pos_profile to each offer for filtering
+		const offersWithProfile = offers.map(offer => ({
+			...offer,
+			pos_profile: posProfile,
+			_cached_at: Date.now(),
+		}))
+
+		// Clear existing offers for this profile and insert new ones
+		await db.transaction('rw', db.table('offers'), async () => {
+			await db.table('offers').where('pos_profile').equals(posProfile).delete()
+			if (offersWithProfile.length > 0) {
+				await db.table('offers').bulkPut(offersWithProfile)
+			}
+		})
+
+		// Update settings with last sync timestamp
+		await db.table('settings').put({
+			key: `offers_last_sync_${posProfile}`,
+			value: Date.now(),
+		})
+
+		log.success(`Cached ${offers.length} offers for profile ${posProfile}`)
+		return { success: true, count: offers.length }
+	} catch (error) {
+		log.error('Error caching offers', error)
+		return { success: false, count: 0, error: error.message }
+	}
+}
+
+/**
+ * Get cached offers for a POS profile.
+ * Filters out expired offers automatically.
+ *
+ * @param {string} posProfile - POS Profile name
+ * @returns {Promise<Array>} Array of cached offers (excluding expired)
+ */
+async function getCachedOffers(posProfile) {
+	try {
+		if (!posProfile) {
+			return []
+		}
+
+		const db = await initDB()
+		const today = new Date().toISOString().split('T')[0]
+
+		// Get offers for specific profile
+		const allOffers = await db
+			.table('offers')
+			.where('pos_profile')
+			.equals(posProfile)
+			.toArray()
+
+		// Filter out expired offers (keep offers without expiry or with future expiry)
+		const validOffers = allOffers.filter(offer => {
+			if (!offer.valid_upto) return true // No expiry
+			return offer.valid_upto >= today
+		})
+
+		log.info(`Retrieved ${validOffers.length} cached offers for profile ${posProfile}`)
+		return validOffers
+	} catch (error) {
+		log.error('Error getting cached offers', error)
+		return []
+	}
+}
+
+/**
+ * Clear cached offers for a POS profile
+ * @param {string} posProfile - POS Profile name (optional, clears all if not provided)
+ */
+async function clearOffersCache(posProfile = null) {
+	try {
+		const db = await initDB()
+
+		if (posProfile) {
+			await db.table('offers').where('pos_profile').equals(posProfile).delete()
+		} else {
+			await db.table('offers').clear()
+		}
+
+		return { success: true }
+	} catch (error) {
+		log.error('Error clearing offers cache', error)
+		return { success: false, error: error.message }
+	}
+}
+
 // Check if cache is ready
 async function isCacheReady() {
 	try {
@@ -1413,6 +1520,19 @@ self.onmessage = async (event) => {
 				// Manually trigger a sync cycle
 				await performStockSync()
 				result = { success: true, status: getStockSyncStatus() }
+				break
+
+			// ===== OFFER CACHE OPERATIONS =====
+			case "CACHE_OFFERS":
+				result = await cacheOffers(payload.offers, payload.posProfile)
+				break
+
+			case "GET_CACHED_OFFERS":
+				result = await getCachedOffers(payload.posProfile)
+				break
+
+			case "CLEAR_OFFERS_CACHE":
+				result = await clearOffersCache(payload.posProfile)
 				break
 
 			default:

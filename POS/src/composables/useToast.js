@@ -19,15 +19,15 @@ export function useToast() {
 	}
 
 	function showSuccess(message) {
-		showToastNotification("Success", message, "success")
+		showToastNotification(__("Success"), message, "success")
 	}
 
 	function showError(message) {
-		showToastNotification("Error", message, "error")
+		showToastNotification(__("Error"), message, "error")
 	}
 
 	function showWarning(message) {
-		showToastNotification("Validation Error", message, "warning")
+		showToastNotification(__("Validation Error"), message, "warning")
 	}
 
 	function hideToast() {

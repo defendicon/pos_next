@@ -348,6 +348,7 @@ class OfflineWorkerClient {
 			case "SEARCH_ITEMS":
 			case "SEARCH_CUSTOMERS":
 			case "GET_PAYMENT_METHODS":
+			case "GET_CACHED_OFFERS":
 				return []
 			case "IS_CACHE_READY":
 				return false
@@ -371,6 +372,8 @@ class OfflineWorkerClient {
 			case "CLEAR_ITEMS_CACHE":
 			case "CLEAR_CUSTOMERS_CACHE":
 			case "REMOVE_ITEMS_BY_GROUPS":
+			case "CACHE_OFFERS":
+			case "CLEAR_OFFERS_CACHE":
 				// For write operations, throw error so caller knows to handle differently
 				throw new Error(`Worker unavailable: Cannot perform ${type}`)
 			default:
@@ -508,6 +511,38 @@ class OfflineWorkerClient {
 	 */
 	async triggerStockSync() {
 		return this.sendMessage("TRIGGER_STOCK_SYNC")
+	}
+
+	// ========================================================================
+	// OFFER CACHE API
+	// ========================================================================
+
+	/**
+	 * Cache promotional offers for offline use
+	 * @param {Array} offers - Array of offer objects from the server
+	 * @param {string} posProfile - POS Profile name to associate with offers
+	 * @returns {Promise<{success: boolean, count: number}>}
+	 */
+	async cacheOffers(offers, posProfile) {
+		return this.sendMessage("CACHE_OFFERS", { offers, posProfile })
+	}
+
+	/**
+	 * Get cached offers for a POS profile
+	 * @param {string} posProfile - POS Profile name
+	 * @returns {Promise<Array>} Array of cached offers (excluding expired)
+	 */
+	async getCachedOffers(posProfile) {
+		return this.sendMessage("GET_CACHED_OFFERS", { posProfile })
+	}
+
+	/**
+	 * Clear cached offers
+	 * @param {string} posProfile - POS Profile name (optional, clears all if not provided)
+	 * @returns {Promise<{success: boolean}>}
+	 */
+	async clearOffersCache(posProfile = null) {
+		return this.sendMessage("CLEAR_OFFERS_CACHE", { posProfile })
 	}
 
 	terminate() {

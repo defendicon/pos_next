@@ -27,6 +27,62 @@ except Exception:  # pragma: no cover - ERPNext not installed in some environmen
 # ==========================================
 
 
+def standardize_pricing_rules(items):
+    """
+    Standardize pricing_rules field on invoice items.
+    ERPNext expects a comma-separated string, but frontend/offline may send:
+    - Python list: ["PRLE-0001", "PRLE-0002"]
+    - JSON string: '["PRLE-0001"]' or '[\\n "PRLE-0001"\\n]'
+
+    Args:
+        items: List of item dicts to standardize (modified in place)
+    """
+    for item in items or []:
+        pricing_rules = item.get("pricing_rules")
+        if not pricing_rules:
+            continue
+
+        item["pricing_rules"] = _pricing_rule_to_string(pricing_rules)
+
+
+def _pricing_rule_to_string(value):
+    """
+    Convert pricing_rules value to comma-separated string.
+    Returns empty string if value is invalid/unparseable.
+    """
+    if not value:
+        return ""
+
+    # Already a list - join it
+    if isinstance(value, list):
+        return ",".join(str(r) for r in value if r)
+
+    # Must be a string at this point
+    if not isinstance(value, str):
+        return ""
+
+    stripped = value.strip()
+
+    # Not JSON-like - return as-is (already a string like "PRLE-0001,PRLE-0002")
+    if not stripped.startswith("["):
+        return stripped
+
+    # Try to parse JSON array
+    try:
+        parsed = json.loads(stripped)
+        if isinstance(parsed, list):
+            return ",".join(str(r) for r in parsed if r)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        # Malformed JSON that looks like array - clear it to prevent issues
+        frappe.log_error(
+            f"Invalid pricing_rules JSON: {stripped[:100]}",
+            "Pricing Rules Normalization"
+        )
+        return ""
+
+    return ""
+
+
 def get_payment_account(mode_of_payment, company):
     """
     Get account for mode of payment.
@@ -257,8 +313,33 @@ def validate_cart_items(items, pos_profile=None):
 
 @frappe.whitelist()
 def validate_return_items(original_invoice_name, return_items, doctype="Sales Invoice"):
-    """Ensure that return items do not exceed the quantity from the original invoice."""
+    """Ensure that return items do not exceed the quantity from the original invoice.
+    Also validates return time frame based on POS Settings."""
+    from frappe.utils import date_diff, getdate
+
     original_invoice = frappe.get_doc(doctype, original_invoice_name)
+
+    # Check return validity period from POS Settings
+    if original_invoice.pos_profile:
+        return_validity_days = cint(
+            frappe.db.get_value(
+                "POS Settings",
+                {"pos_profile": original_invoice.pos_profile},
+                "return_validity_days"
+            ) or 0
+        )
+
+        if return_validity_days > 0:
+            days_since_invoice = date_diff(getdate(nowdate()), getdate(original_invoice.posting_date))
+            if days_since_invoice > return_validity_days:
+                return {
+                    "valid": False,
+                    "message": _(
+                        "Return period has expired. Invoice {0} was created {1} days ago. "
+                        "Returns are only allowed within {2} days of purchase."
+                    ).format(original_invoice_name, days_since_invoice, return_validity_days),
+                }
+
     original_item_qty = {}
 
     for item in original_invoice.items:
@@ -315,6 +396,9 @@ def update_invoice(data):
         # Ensure the document type is set
         data.setdefault("doctype", doctype)
 
+        # Normalize pricing_rules before document creation
+        standardize_pricing_rules(data.get("items"))
+
         # Create or update invoice
         if data.get("name"):
             invoice_doc = frappe.get_doc(doctype, data.get("name"))
@@ -358,8 +442,11 @@ def update_invoice(data):
                         )
                         if account_info:
                             payment["account"] = account_info.get("account")
-                    except Exception:
-                        pass  # Will be handled during save
+                    except Exception as e:
+                        frappe.log_error(
+                            f"Failed to get payment account for {mode_of_payment}: {e}",
+                            "Payment Account Lookup"
+                        )
 
         # Validate return items if this is a return invoice
         if (data.get("is_return") or invoice_doc.get("is_return")) and invoice_doc.get(
@@ -430,6 +517,22 @@ def update_invoice(data):
             # ERPNext will recalculate if needed, but preserving frontend rate
             # prevents rounding issues and ensures UI matches invoice
 
+            # Convert pricing_rules from list to comma-separated string
+            # ERPNext expects pricing_rules as a string, not a list
+            pricing_rules = item.get("pricing_rules")
+            if pricing_rules:
+                if isinstance(pricing_rules, list):
+                    item.pricing_rules = ",".join(str(r) for r in pricing_rules)
+                elif isinstance(pricing_rules, str) and pricing_rules.startswith("["):
+                    # Handle JSON string representation of list
+                    try:
+                        rules_list = json.loads(pricing_rules)
+                        if isinstance(rules_list, list):
+                            item.pricing_rules = ",".join(str(r) for r in rules_list)
+                    except (json.JSONDecodeError, TypeError):
+                        # Keep original value - malformed JSON will be handled by standardize_pricing_rules
+                        item.pricing_rules = ""
+
         # Set invoice flags BEFORE calculations
         if doctype == "Sales Invoice":
             invoice_doc.is_pos = 1
@@ -479,8 +582,11 @@ def update_invoice(data):
                     )
                     if account_info:
                         payment.account = account_info.get("account")
-                except Exception:
-                    pass  # Will be handled during save
+                except Exception as e:
+                    frappe.log_error(
+                        f"Failed to get payment account for {mode_of_payment}: {e}",
+                        "Payment Account Lookup"
+                    )
 
         # For return invoices, ensure payments are negative
         if invoice_doc.get("is_return"):
@@ -549,9 +655,9 @@ def _reuse_sync_record(sync_record_name):
     return {"already_synced": False, "sync_record_name": sync_record_name}
 
 
-def _handle_offline_deduplication(offline_id, pos_profile=None, customer=None):
+def _ensure_offline_uniqueness(offline_id, pos_profile=None, customer=None):
     """
-    Handle offline invoice deduplication with race condition protection.
+    Ensure offline invoice uniqueness with race condition protection.
 
     Uses a reservation pattern:
     1. Check if a sync record exists (with row-level lock)
@@ -650,7 +756,7 @@ def _handle_offline_deduplication(offline_id, pos_profile=None, customer=None):
     except frappe.DuplicateEntryError:
         # Race condition: another request just created the record
         # Retry the check to get the new record
-        return _handle_offline_deduplication(offline_id, pos_profile, customer)
+        return _ensure_offline_uniqueness(offline_id, pos_profile, customer)
 
 
 def _complete_offline_sync(sync_record_name, invoice_name):
@@ -790,6 +896,9 @@ def submit_invoice(invoice=None, data=None):
     pos_profile = invoice.get("pos_profile")
     doctype = invoice.get("doctype", "Sales Invoice")
 
+    # Normalize pricing_rules before processing
+    standardize_pricing_rules(invoice.get("items"))
+
     # ========================================================================
     # OFFLINE INVOICE DEDUPLICATION
     # ========================================================================
@@ -802,7 +911,7 @@ def submit_invoice(invoice=None, data=None):
     sync_record_name = None
 
     if offline_id:
-        dedup_result = _handle_offline_deduplication(
+        dedup_result = _ensure_offline_uniqueness(
             offline_id=offline_id,
             pos_profile=pos_profile,
             customer=invoice.get("customer")
@@ -838,6 +947,13 @@ def submit_invoice(invoice=None, data=None):
         if doctype == "Sales Invoice":
             invoice_doc.update_stock = 1
 
+        # For return invoices, set update_outstanding_for_self = 0
+        # This ensures the GL entry's against_voucher points to the original invoice,
+        # which properly reduces the original invoice's outstanding amount and
+        # sets its status to "Credit Note Issued"
+        if invoice_doc.get("is_return") and invoice_doc.get("return_against"):
+            invoice_doc.update_outstanding_for_self = 0
+
         # Copy accounting dimensions from POS Profile if not already set
         if pos_profile and not invoice_doc.get("branch"):
             try:
@@ -848,8 +964,12 @@ def submit_invoice(invoice=None, data=None):
                     for item in invoice_doc.get("items", []):
                         if not item.get("branch"):
                             item.branch = pos_profile_doc.branch
-            except Exception:
-                pass  # Branch is optional, continue without it
+            except Exception as e:
+                # Branch is optional, log and continue
+                frappe.log_error(
+                    f"Failed to set branch from POS Profile {pos_profile}: {e}",
+                    "POS Profile Branch"
+                )
 
         # Set accounts for all payment methods before saving
         if doctype == "Sales Invoice" and hasattr(invoice_doc, "payments"):
@@ -1180,16 +1300,37 @@ def cleanup_old_drafts(pos_profile=None, max_age_hours=24):
 
 
 @frappe.whitelist()
-def get_returnable_invoices(limit=50):
-    """Get list of invoices that have items available for return."""
+def get_returnable_invoices(limit=50, pos_profile=None):
+    """Get list of invoices that have items available for return.
+    Filters by return validity period if configured in POS Settings."""
     # Performance: Use SQL aggregation to calculate returned quantities in one query
     # This eliminates N+1 queries by joining return invoices and aggregating in the database
 
-    query = """
+    # Check return validity days from POS Settings
+    return_validity_days = 0
+    if pos_profile:
+        return_validity_days = cint(
+            frappe.db.get_value(
+                "POS Settings",
+                {"pos_profile": pos_profile},
+                "return_validity_days"
+            ) or 0
+        )
+
+    # Build date filter condition
+    date_filter = ""
+    query_params = []
+
+    if return_validity_days > 0:
+        date_filter = "AND si.posting_date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)"
+        query_params.append(return_validity_days)
+
+    query = f"""
         SELECT
             si.name,
             si.customer,
             si.customer_name,
+            si.contact_mobile,
             si.posting_date,
             si.grand_total,
             si.status,
@@ -1205,25 +1346,144 @@ def get_returnable_invoices(limit=50):
         WHERE si.docstatus = 1
             AND si.is_return = 0
             AND si.is_pos = 1
+            {date_filter}
         GROUP BY si.name
         HAVING total_original_qty > total_returned_qty
         ORDER BY si.posting_date DESC, si.creation DESC
         LIMIT %s
     """
 
-    returnable_invoices = frappe.db.sql(query, [cint(limit)], as_dict=1)
+    query_params.append(cint(limit))
+    returnable_invoices = frappe.db.sql(query, query_params, as_dict=1)
 
     return returnable_invoices
 
 
 @frappe.whitelist()
+def search_invoice_by_number(search_term, pos_profile=None):
+    """Search for invoices by invoice number across the entire database.
+    No date restrictions - searches all returnable invoices matching the term.
+
+    Args:
+        search_term: Invoice number or partial number to search for
+        pos_profile: Optional POS profile for context
+
+    Returns:
+        List of matching invoices with return availability info
+    """
+    if not search_term or len(search_term) < 3:
+        return []
+
+    search_term = cstr(search_term).strip()
+
+    # Search invoices matching the term (case-insensitive LIKE search)
+    query = """
+        SELECT
+            si.name,
+            si.customer,
+            si.customer_name,
+            si.contact_mobile,
+            si.posting_date,
+            si.grand_total,
+            si.status,
+            COALESCE(SUM(CASE WHEN ret_item.qty IS NOT NULL THEN ABS(ret_item.qty) ELSE 0 END), 0) as total_returned_qty,
+            COALESCE(SUM(CASE WHEN si_item.qty IS NOT NULL THEN si_item.qty ELSE 0 END), 0) as total_original_qty
+        FROM `tabSales Invoice` si
+        LEFT JOIN `tabSales Invoice Item` si_item ON si_item.parent = si.name
+        LEFT JOIN `tabSales Invoice` ret_si ON ret_si.return_against = si.name
+            AND ret_si.docstatus = 1
+            AND ret_si.is_return = 1
+        LEFT JOIN `tabSales Invoice Item` ret_item ON ret_item.parent = ret_si.name
+            AND (ret_item.sales_invoice_item = si_item.name OR ret_item.item_code = si_item.item_code)
+        WHERE si.docstatus = 1
+            AND si.is_return = 0
+            AND si.is_pos = 1
+            AND si.name LIKE %s
+        GROUP BY si.name
+        HAVING total_original_qty > total_returned_qty
+        ORDER BY si.posting_date DESC, si.creation DESC
+        LIMIT 10
+    """
+
+    # Use LIKE search with wildcards
+    search_pattern = f"%{search_term}%"
+    matching_invoices = frappe.db.sql(query, [search_pattern], as_dict=1)
+
+    return matching_invoices
+
+
+@frappe.whitelist()
+def check_invoice_return_validity(invoice_name):
+    """Check if an invoice is within the return validity period.
+    Returns detailed information for the UI to display."""
+    from frappe.utils import date_diff, getdate, formatdate
+
+    if not frappe.db.exists("Sales Invoice", invoice_name):
+        return {
+            "valid": False,
+            "error_type": "not_found",
+            "message": _("Invoice {0} does not exist").format(invoice_name)
+        }
+
+    invoice = frappe.get_doc("Sales Invoice", invoice_name)
+
+    # Check return validity period from POS Settings
+    if invoice.pos_profile:
+        return_validity_days = cint(
+            frappe.db.get_value(
+                "POS Settings",
+                {"pos_profile": invoice.pos_profile},
+                "return_validity_days"
+            ) or 0
+        )
+
+        if return_validity_days > 0:
+            days_since_invoice = date_diff(getdate(nowdate()), getdate(invoice.posting_date))
+            if days_since_invoice > return_validity_days:
+                return {
+                    "valid": False,
+                    "error_type": "return_period_expired",
+                    "invoice_name": invoice_name,
+                    "invoice_date": formatdate(invoice.posting_date),
+                    "days_since": days_since_invoice,
+                    "allowed_days": return_validity_days,
+                    "message": _("Return period has expired")
+                }
+
+    return {"valid": True}
+
+
+@frappe.whitelist()
 def get_invoice_for_return(invoice_name):
-    """Get invoice with return tracking - calculates remaining qty for each item."""
+    """Get invoice with return tracking - calculates remaining qty for each item.
+    Also validates return validity period based on POS Settings."""
+    from frappe.utils import date_diff, getdate
+
     if not frappe.db.exists("Sales Invoice", invoice_name):
         frappe.throw(_("Invoice {0} does not exist").format(invoice_name))
 
     # Get the original invoice
     invoice = frappe.get_doc("Sales Invoice", invoice_name)
+
+    # Check return validity period from POS Settings
+    if invoice.pos_profile:
+        return_validity_days = cint(
+            frappe.db.get_value(
+                "POS Settings",
+                {"pos_profile": invoice.pos_profile},
+                "return_validity_days"
+            ) or 0
+        )
+
+        if return_validity_days > 0:
+            days_since_invoice = date_diff(getdate(nowdate()), getdate(invoice.posting_date))
+            if days_since_invoice > return_validity_days:
+                frappe.throw(
+                    _("Return period has expired. Invoice {0} was created {1} days ago. "
+                      "Returns are only allowed within {2} days of purchase.").format(
+                        invoice_name, days_since_invoice, return_validity_days
+                    )
+                )
 
     # Performance: Use SQL aggregation to calculate returned quantities in one query
     # This eliminates N+1 queries by aggregating all return items at once
@@ -1484,7 +1744,18 @@ def apply_offers(invoice_data, selected_offers=None):
             # Either no POS profile supplied or ERPNext promotional engine unavailable
             return {"items": items}
 
-        profile = frappe.get_doc("POS Profile", invoice.get("pos_profile"))
+        profile = frappe.get_cached_doc("POS Profile", invoice.get("pos_profile"))
+
+        # Batch fetch all item details in a single query (reduces N queries to 1)
+        item_codes = list({item.get("item_code") for item in items if item.get("item_code")})
+        item_details_map = {}
+        if item_codes:
+            item_records = frappe.get_all(
+                "Item",
+                filters={"name": ["in", item_codes]},
+                fields=["name", "item_name", "item_group", "brand", "stock_uom"],
+            )
+            item_details_map = {r.name: r for r in item_records}
 
         pricing_items = []
         index_map = []
@@ -1497,15 +1768,8 @@ def apply_offers(invoice_data, selected_offers=None):
             if not item_code or qty <= 0:
                 continue
 
-            try:
-                cached = frappe.get_cached_value(
-                    "Item",
-                    item_code,
-                    ["item_name", "item_group", "brand", "stock_uom"],
-                    as_dict=1,
-                )
-            except frappe.DoesNotExistError:
-                cached = None
+            # Use batch-fetched item details
+            cached = item_details_map.get(item_code)
 
             conversion_factor = flt(item.get("conversion_factor") or 1) or 1
             price_list_rate = flt(item.get("price_list_rate") or item.get("rate") or 0)
@@ -1573,8 +1837,12 @@ def apply_offers(invoice_data, selected_offers=None):
                     customer_group = customer_data.get("customer_group")
                     if not territory:
                         territory = customer_data.get("territory")
-            except Exception:
-                pass
+            except Exception as e:
+                # Customer lookup failed, will use defaults
+                frappe.log_error(
+                    f"Failed to fetch customer data for {customer}: {e}",
+                    "Customer Data Lookup"
+                )
 
         # If still no customer_group, use default
         if not customer_group:
@@ -1603,7 +1871,17 @@ def apply_offers(invoice_data, selected_offers=None):
         )
 
         # Call ERPNext pricing engine - it handles all conflicts based on priority
-        pricing_results = erpnext_apply_pricing_rule(pricing_args) or []
+        #
+        # Why we pass pricing_args twice:
+        # - 1st param (args): ERPNext extracts and pops 'items' from this, then processes each item individually
+        # - 2nd param (doc): Used by 'mixed_conditions' pricing rules to access the FULL items list
+        #                    for quantity accumulation across different items in the same group
+        #
+        # Example: A rule "Buy 2 from Demo Item Group, get 10% off" with mixed_conditions=1
+        # needs to see ALL items (1 Book + 1 Camera) to know total qty=2, not just each item's qty=1
+        #
+        # See: erpnext/accounts/doctype/pricing_rule/utils.py -> get_qty_and_rate_for_mixed_conditions()
+        pricing_results = erpnext_apply_pricing_rule(pricing_args, doc=pricing_args) or []
 
         if not pricing_results:
             return {"items": items}
@@ -1626,6 +1904,23 @@ def apply_offers(invoice_data, selected_offers=None):
                     rules = list(raw_rules)
             raw_rule_names.update(rules)
 
+        # Build a map of applicable pricing rules from the ERPNext engine results.
+        #
+        # ERPNext has two types of pricing rules:
+        #
+        # 1. Promotional Scheme Rules (promotional_scheme is set):
+        #    - Created automatically when a Promotional Scheme is saved
+        #    - The scheme acts as a "template" that generates one or more Pricing Rules
+        #    - Example: "Summer Sale" scheme creates "PRLE-0001", "PRLE-0002" rules
+        #
+        # 2. Standalone Pricing Rules (promotional_scheme is empty):
+        #    - Created directly as Pricing Rule documents
+        #    - Not linked to any Promotional Scheme
+        #    - Example: A direct "10% off Item X" rule created in Pricing Rule doctype
+        #
+        # We include BOTH types for POS, but exclude coupon_code_based rules
+        # (those require explicit coupon entry and are handled separately).
+        #
         rule_map = {}
         if raw_rule_names:
             rule_records = frappe.get_all(
@@ -1640,8 +1935,12 @@ def apply_offers(invoice_data, selected_offers=None):
                 ],
             )
             for record in rule_records:
-                if record.promotional_scheme and not record.coupon_code_based:
-                    rule_map[record.name] = record
+                # Skip coupon-based rules (require explicit coupon code entry)
+                if record.coupon_code_based:
+                    continue
+
+                # Include both promotional scheme rules and standalone pricing rules
+                rule_map[record.name] = record
 
         if selected_offer_names:
             # Restrict available rules to the ones explicitly selected from the UI.
@@ -1752,7 +2051,8 @@ def apply_offers(invoice_data, selected_offers=None):
             item_doc.discount_amount = line_discount_amount
             item_doc.price_list_rate = price_list_rate
             item_doc.rate = flt(item_doc.get("rate") or price_list_rate)
-            item_doc.pricing_rules = applicable_rule_names
+            # ERPNext expects pricing_rules as comma-separated string, not a list
+            item_doc.pricing_rules = ",".join(applicable_rule_names) if applicable_rule_names else ""
 
             item_doc.applied_promotional_schemes = list(
                 {

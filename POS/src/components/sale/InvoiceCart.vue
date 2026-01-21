@@ -407,15 +407,13 @@
 						/>
 					</svg>
 					<span class="text-[11px] font-bold text-green-700">{{ __("Offers") }}</span>
+					<!-- Badge shows ONLY applied offers count - NOT eligible/pending offers -->
+					<!-- This prevents confusion where offers show as "applied" before backend validation -->
 					<span
-						v-if="appliedOfferCount > 0 || offersStore.autoEligibleCount > 0"
+						v-if="appliedOfferCount > 0"
 						class="bg-green-600 text-white text-[9px] font-bold rounded-full px-1.5 py-0.5 flex-shrink-0 min-w-[16px] text-center"
 					>
-						{{
-							appliedOfferCount > 0
-								? appliedOfferCount
-								: offersStore.autoEligibleCount
-						}}
+						{{ appliedOfferCount }}
 					</span>
 				</button>
 
@@ -778,12 +776,13 @@
 
 							<!-- Single Row: Quantity Counter, UOM, Price & Total -->
 							<div class="flex items-center justify-between gap-1.5">
-								<div class="flex items-center gap-1.5" @click.stop>
+								<div class="flex items-center gap-1.5">
 									<!-- Quantity Counter -->
 									<!-- For serial items, show serial badge with edit button -->
 									<div
 										v-if="item.has_serial_no && item.serial_no"
 										class="flex items-center gap-1"
+										@click.stop
 									>
 										<!-- Serial count badge -->
 										<div
@@ -890,7 +889,7 @@
 									</div>
 
 									<!-- UOM Selector Dropdown -->
-									<div class="relative group/uom">
+									<div class="relative group/uom" @click.stop>
 										<button
 											type="button"
 											@click="toggleUomDropdown(item.item_code, item.uom)"
@@ -1168,6 +1167,7 @@ import { useCustomerSearchStore } from "@/stores/customerSearch";
 import { formatCurrency as formatCurrencyUtil } from "@/utils/currency";
 import { useFormatters } from "@/composables/useFormatters";
 import { isOffline } from "@/utils/offline";
+import { offlineWorker } from "@/utils/offline/workerClient";
 import { logger } from "@/utils/logger";
 import { FeatherIcon } from "frappe-ui";
 
@@ -1315,37 +1315,10 @@ if (props.posProfile) {
 	customerSearchStore.loadAllCustomers(props.posProfile);
 }
 
-/**
- * Offers Resource
- *
- * Fetches all promotional offers for the current POS Profile.
- * - Loads available offers and stores them in Pinia offers store
- * - Only fetches when online (offers not cached for offline use)
- * - Used for the "Offers" button badge count and offers dialog
- *
- * @endpoint pos_next.api.offers.get_offers
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const offersResource = createResource({
-	url: "pos_next.api.offers.get_offers",
-	makeParams() {
-		return {
-			pos_profile: props.posProfile,
-		};
-	},
-	auto: false, // Don't auto-load - check offline status first
-	onSuccess(data) {
-		const offers = data?.message || data || [];
-		offersStore.setAvailableOffers(offers);
-	},
-	onError(error) {
-		log.error("Error loading offers:", error);
-	},
-});
-
-// Load offers only when online (offers not cached for offline use)
-if (!isOffline()) {
-	offersResource.reload();
+// Load offers on component init (uses shared store method to prevent duplicate fetches)
+// ensureOffersFetched handles both online/offline cases and caching
+if (props.posProfile) {
+	offersStore.ensureOffersFetched(props.posProfile);
 }
 
 /**

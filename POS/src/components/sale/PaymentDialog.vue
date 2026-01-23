@@ -892,9 +892,12 @@ import { getPaymentIcon } from "@/utils/payment"
 import { offlineWorker } from "@/utils/offline/workerClient"
 import { logger } from "@/utils/logger"
 import { Dialog, createResource, call } from "frappe-ui"
-import { computed, ref, watch, nextTick, onMounted, onUnmounted } from "vue"
+import { computed, ref, watch, nextTick } from "vue"
 import { useToast } from "@/composables/useToast"
 import { useLongPress } from "@/composables/useLongPress"
+import { usePaymentNumpad } from "@/composables/usePaymentNumpad"
+import { useResponsivePayment } from "@/composables/useResponsivePayment"
+import { useQuickAmounts } from "@/composables/useQuickAmounts"
 
 const log = logger.create('PaymentDialog')
 const settingsStore = usePOSSettingsStore()
@@ -991,167 +994,20 @@ const isSalesOrder = computed(() => props.targetDoctype === "Sales Order")
 const rightColumnRef = ref(null)
 const rightColumnMinHeight = ref('auto')
 
-// Viewport dimension tracking for dynamic sizing
-const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1200)
-const viewportHeight = ref(typeof window !== 'undefined' ? window.innerHeight : 800)
-
-function updateViewportDimensions() {
-	viewportWidth.value = window.innerWidth
-	viewportHeight.value = window.innerHeight
-}
-
-onMounted(() => {
-	updateViewportDimensions()
-	window.addEventListener('resize', updateViewportDimensions)
-})
-
-onUnmounted(() => {
-	window.removeEventListener('resize', updateViewportDimensions)
-})
-
-// Dynamic dialog size based on viewport
-const dynamicDialogSize = computed(() => {
-	const width = viewportWidth.value
-	if (width < 640) return 'full' // Mobile: full screen
-	if (width < 768) return 'full' // Small tablet: full screen for better usability
-	if (width < 1024) return '4xl' // Tablet
-	if (width < 1280) return '5xl' // Small desktop
-	return '6xl' // Large desktop
-})
-
-// Check if we're on a mobile device (for mobile-specific behavior)
-const isMobileView = computed(() => viewportWidth.value < 1024)
-
-// Dynamic content max height based on viewport
-const dialogContentMaxHeight = computed(() => {
-	const height = viewportHeight.value
-	const width = viewportWidth.value
-
-	// On mobile, don't set max-height - let content determine size
-	if (width < 1024) {
-		return 'none'
-	}
-	// Desktop: use fixed pixel calculation
-	const availableHeight = height - 100
-	return `${Math.min(Math.max(500, availableHeight), height - 80)}px`
-})
-
-// Dynamic column heights based on viewport
-const dynamicLeftColumnHeight = computed(() => {
-	const height = viewportHeight.value
-	if (viewportWidth.value < 1024) {
-		// Mobile/tablet: auto height, will stack
-		return 'auto'
-	}
-	// Desktop: calculate based on available space
-	const availableHeight = height - 160 // Header + padding + action buttons
-	return `${Math.max(400, Math.min(availableHeight, height - 120))}px`
-})
-
-// Check if we're in compact mode (small screens)
-const isCompactMode = computed(() => viewportHeight.value < 700 || viewportWidth.value < 1024)
-
-// Check if we're on a very small mobile screen
-const isSmallMobile = computed(() => viewportWidth.value < 360 || viewportHeight.value < 600)
-
-// Dynamic gap and padding based on screen size
-const dynamicGap = computed(() => {
-	if (viewportWidth.value < 360) return 'gap-1' // Very small phones
-	if (viewportWidth.value < 640) return 'gap-1.5'
-	if (viewportWidth.value < 1024) return 'gap-2'
-	return 'gap-3'
-})
-
-// Dynamic text sizes
-const dynamicTextSize = computed(() => {
-	const width = viewportWidth.value
-	const height = viewportHeight.value
-
-	// Very small phones
-	if (width < 360 || height < 550) {
-		return {
-			header: 'text-[10px]',
-			body: 'text-[10px]',
-			amount: 'text-base',
-			grandTotal: 'text-base',
-		}
-	}
-	// Small phones
-	if (width < 640) {
-		return {
-			header: 'text-xs',
-			body: 'text-xs',
-			amount: 'text-lg',
-			grandTotal: 'text-lg',
-		}
-	}
-	// Tablet and small height screens
-	if (height < 700) {
-		return {
-			header: 'text-sm',
-			body: 'text-sm',
-			amount: 'text-lg',
-			grandTotal: 'text-xl',
-		}
-	}
-	// Default desktop
-	return {
-		header: 'text-sm',
-		body: 'text-sm',
-		amount: 'text-xl',
-		grandTotal: 'text-2xl',
-	}
-})
-
-// Dynamic button heights
-const dynamicButtonHeight = computed(() => {
-	const width = viewportWidth.value
-	const height = viewportHeight.value
-
-	// Very small phones - smaller buttons
-	if (width < 360 || height < 550) return 'h-9'
-	// Small phones
-	if (width < 640) return 'h-10'
-	// Short screens
-	if (height < 700) return 'h-10'
-	return 'h-12'
-})
-
-// Mobile action button sizing
-const mobileButtonSize = computed(() => {
-	const width = viewportWidth.value
-	const height = viewportHeight.value
-
-	if (width < 360 || height < 550) {
-		return {
-			height: 'h-9',
-			text: 'text-xs',
-			icon: 'w-3.5 h-3.5',
-			gap: 'gap-1',
-		}
-	}
-	if (width < 640) {
-		return {
-			height: 'h-10',
-			text: 'text-sm',
-			icon: 'w-4 h-4',
-			gap: 'gap-1.5',
-		}
-	}
-	return {
-		height: 'h-11',
-		text: 'text-sm',
-		icon: 'w-4 h-4',
-		gap: 'gap-2',
-	}
-})
-
-// Dynamic numpad key size
-const dynamicNumpadSize = computed(() => {
-	if (viewportHeight.value < 600) return { key: 'h-10', addBtn: 'h-[6.5rem]' }
-	if (viewportHeight.value < 700) return { key: 'h-10', addBtn: 'h-[7rem]' }
-	return { key: 'h-12', addBtn: 'h-[8.5rem]' }
-})
+// Use responsive payment composable for viewport tracking and dynamic sizing
+const {
+	dynamicDialogSize,
+	isMobileView,
+	dialogContentMaxHeight,
+	dynamicLeftColumnHeight,
+	isCompactMode,
+	isSmallMobile,
+	dynamicGap,
+	dynamicTextSize,
+	dynamicButtonHeight,
+	mobileButtonSize,
+	dynamicNumpadSize,
+} = useResponsivePayment()
 
 // Calculate and sync column heights when dialog opens
 function syncColumnHeights() {
@@ -1174,12 +1030,15 @@ watch(() => props.modelValue, (isOpen) => {
 	}
 })
 
-// Numpad state
-const numpadDisplay = ref('')
-const numpadValue = computed(() => {
-	const val = Number.parseFloat(numpadDisplay.value)
-	return Number.isNaN(val) ? 0 : val
-})
+// Use numpad composable for keypad input handling
+const {
+	numpadDisplay,
+	numpadValue,
+	numpadInput,
+	numpadBackspace,
+	numpadClear,
+	setNumpadValue,
+} = usePaymentNumpad()
 
 // Mobile custom amount state
 const mobileCustomAmount = ref('')
@@ -1190,38 +1049,6 @@ function addMobileCustomPayment() {
 		addCustomPayment(lastSelectedMethod.value, amount)
 		mobileCustomAmount.value = ''
 	}
-}
-
-// Numpad functions
-function numpadInput(char) {
-	// Prevent multiple decimal points
-	if (char === '.' && numpadDisplay.value.includes('.')) {
-		return
-	}
-
-	// Limit decimal places to 2
-	if (numpadDisplay.value.includes('.')) {
-		const [, decimal] = numpadDisplay.value.split('.')
-		if (decimal && decimal.length >= 2) {
-			return
-		}
-	}
-
-	// Limit total length to reasonable amount
-	if (numpadDisplay.value.length >= 10) {
-		return
-	}
-
-	// Add the character
-	numpadDisplay.value += char
-}
-
-function numpadBackspace() {
-	numpadDisplay.value = numpadDisplay.value.slice(0, -1)
-}
-
-function numpadClear() {
-	numpadDisplay.value = ''
 }
 
 function numpadAddPayment() {
@@ -1695,72 +1522,8 @@ const paymentButtonText = computed(() => {
 	return __("Complete Payment")
 })
 
-const quickAmounts = computed(() => {
-	const remaining = remainingAmount.value
-	if (remaining <= 0) {
-		return [10, 20, 50, 100]
-	}
-
-	const amounts = new Set()
-	const exactAmount = Math.ceil(remaining)
-
-	// Always include exact amount first
-	amounts.add(exactAmount)
-
-	// Determine appropriate denominations based on amount size
-	// For amounts < 50, use smaller denominations
-	// For amounts >= 50, skip to larger denominations for meaningful differences
-	let denominations
-	if (remaining < 20) {
-		denominations = [5, 10, 20, 50]
-	} else if (remaining < 100) {
-		denominations = [10, 20, 50, 100]
-	} else if (remaining < 500) {
-		denominations = [50, 100, 200, 500]
-	} else if (remaining < 2000) {
-		denominations = [100, 200, 500, 1000]
-	} else {
-		denominations = [500, 1000, 2000, 5000]
-	}
-
-	// Minimum gap between suggestions (at least 5% or 5, whichever is larger)
-	const minGap = Math.max(5, exactAmount * 0.05)
-
-	// Helper to check if amount is far enough from existing amounts
-	const isFarEnough = (newAmt) => {
-		for (const existing of amounts) {
-			if (Math.abs(newAmt - existing) < minGap) return false
-		}
-		return true
-	}
-
-	// Add round-up amounts for each denomination
-	for (const denom of denominations) {
-		if (amounts.size >= 4) break
-
-		// Round up to next multiple of this denomination
-		const roundedUp = Math.ceil(remaining / denom) * denom
-
-		// Add if it's meaningfully different from exact amount
-		if (roundedUp > exactAmount && isFarEnough(roundedUp)) {
-			amounts.add(roundedUp)
-		}
-
-		// Also add one step higher for convenience (e.g., 350 when remaining is 299)
-		if (amounts.size < 4) {
-			const oneStepUp = roundedUp + denom
-			if (oneStepUp > exactAmount && isFarEnough(oneStepUp)) {
-				amounts.add(oneStepUp)
-			}
-		}
-	}
-
-	// Convert to array, sort, and limit to 4
-	return Array.from(amounts)
-		.filter((amt) => amt > 0)
-		.sort((a, b) => a - b)
-		.slice(0, 4)
-})
+// Use quick amounts composable for smart amount suggestions
+const { quickAmounts } = useQuickAmounts(remainingAmount)
 
 // Preload payment methods when posProfile is set (before dialog opens)
 watch(
@@ -1784,7 +1547,7 @@ watch(show, (newVal) => {
 		// Reset state when dialog opens
 		paymentEntries.value = []
 		customAmount.value = ""
-		numpadDisplay.value = ""
+		numpadClear()
 		mobileCustomAmount.value = ""
 		lastSelectedMethod.value = null
 		customerCredit.value = []
@@ -1870,7 +1633,7 @@ function switchToNextPaymentMethod(partialAmount) {
 		// Pre-fill numpad with remaining amount for convenience
 		const newRemaining = round2(remainingAmount.value)
 		if (newRemaining > 0) {
-			numpadDisplay.value = newRemaining.toFixed(2)
+			setNumpadValue(newRemaining)
 			// Also set mobile custom amount
 			mobileCustomAmount.value = newRemaining.toFixed(2)
 		}

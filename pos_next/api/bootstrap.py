@@ -128,70 +128,26 @@ def get_pos_profile_data(pos_profile):
 
 def get_pos_settings(pos_profile):
 	"""Get POS Settings for a given POS Profile"""
+	from pos_next.api.constants import POS_SETTINGS_FIELDS, DEFAULT_POS_SETTINGS
+
 	if not pos_profile:
-		return get_default_pos_settings()
+		return DEFAULT_POS_SETTINGS.copy()
 
 	try:
 		pos_settings = frappe.db.get_value(
 			"POS Settings",
 			{"pos_profile": pos_profile, "enabled": 1},
-			[
-				"name",
-				"enabled",
-				"tax_inclusive",
-				"allow_user_to_edit_additional_discount",
-				"allow_user_to_edit_item_discount",
-				"use_percentage_discount",
-				"max_discount_allowed",
-				"disable_rounded_total",
-				"allow_credit_sale",
-				"allow_return",
-				"allow_write_off_change",
-				"allow_partial_payment",
-				"use_exact_amount",
-				"decimal_precision",
-				"allow_negative_stock",
-				"enable_sales_persons",
-				"silent_print",
-				"allow_sales_order",
-				"allow_select_sales_order",
-				"create_only_sales_order"
-			],
+			POS_SETTINGS_FIELDS,
 			as_dict=True
 		)
 
 		if not pos_settings:
-			return get_default_pos_settings()
+			return DEFAULT_POS_SETTINGS.copy()
 
 		return pos_settings
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "Get POS Settings Error")
-		return get_default_pos_settings()
-
-
-def get_default_pos_settings():
-	"""Return default POS Settings"""
-	return {
-		"enabled": 0,
-		"tax_inclusive": 0,
-		"allow_user_to_edit_additional_discount": 0,
-		"allow_user_to_edit_item_discount": 1,
-		"use_percentage_discount": 0,
-		"max_discount_allowed": 0,
-		"disable_rounded_total": 1,
-		"allow_credit_sale": 0,
-		"allow_return": 0,
-		"allow_write_off_change": 0,
-		"allow_partial_payment": 0,
-		"use_exact_amount": 0,
-		"decimal_precision": "2",
-		"allow_negative_stock": 0,
-		"enable_sales_persons": "Disabled",
-		"silent_print": 0,
-		"allow_sales_order": 0,
-		"allow_select_sales_order": 0,
-		"create_only_sales_order": 0
-	}
+		return DEFAULT_POS_SETTINGS.copy()
 
 
 def get_payment_methods(pos_profile):

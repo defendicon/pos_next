@@ -10,17 +10,19 @@
 						'rounded-lg shadow-xl p-4 flex items-start gap-3',
 						toastNotification.type === 'success' ? 'bg-green-50 border-s-4 border-green-500' : '',
 						toastNotification.type === 'error' ? 'bg-red-50 border-s-4 border-red-500' : '',
-						toastNotification.type === 'warning' ? 'bg-orange-50 border-s-4 border-orange-500' : ''
+						toastNotification.type === 'warning' ? 'bg-orange-50 border-s-4 border-orange-500' : '',
+						toastNotification.type === 'info' ? 'bg-blue-50 border-s-4 border-blue-500' : ''
 					]"
 				>
 					<div class="flex-shrink-0">
 						<FeatherIcon
-							:name="toastNotification.type === 'success' ? 'check-circle' : toastNotification.type === 'error' ? 'x-circle' : 'alert-circle'"
+							:name="toastNotification.type === 'success' ? 'check-circle' : toastNotification.type === 'error' ? 'x-circle' : toastNotification.type === 'info' ? 'info' : 'alert-circle'"
 							:class="[
 								'w-5 h-5',
 								toastNotification.type === 'success' ? 'text-green-600' : '',
 								toastNotification.type === 'error' ? 'text-red-600' : '',
-								toastNotification.type === 'warning' ? 'text-orange-600' : ''
+								toastNotification.type === 'warning' ? 'text-orange-600' : '',
+								toastNotification.type === 'info' ? 'text-blue-600' : ''
 							]"
 						/>
 					</div>
@@ -30,7 +32,8 @@
 								'text-sm font-semibold',
 								toastNotification.type === 'success' ? 'text-green-900' : '',
 								toastNotification.type === 'error' ? 'text-red-900' : '',
-								toastNotification.type === 'warning' ? 'text-orange-900' : ''
+								toastNotification.type === 'warning' ? 'text-orange-900' : '',
+								toastNotification.type === 'info' ? 'text-blue-900' : ''
 							]"
 						>
 							{{ toastNotification.title }}
@@ -40,7 +43,8 @@
 								'text-sm mt-1',
 								toastNotification.type === 'success' ? 'text-green-700' : '',
 								toastNotification.type === 'error' ? 'text-red-700' : '',
-								toastNotification.type === 'warning' ? 'text-orange-700' : ''
+								toastNotification.type === 'warning' ? 'text-orange-700' : '',
+								toastNotification.type === 'info' ? 'text-blue-700' : ''
 							]"
 						>
 							{{ toastNotification.message }}
@@ -56,7 +60,8 @@
 								'w-4 h-4',
 								toastNotification.type === 'success' ? 'text-green-600 hover:text-green-900' : '',
 								toastNotification.type === 'error' ? 'text-red-600 hover:text-red-900' : '',
-								toastNotification.type === 'warning' ? 'text-orange-600 hover:text-orange-900' : ''
+								toastNotification.type === 'warning' ? 'text-orange-600 hover:text-orange-900' : '',
+								toastNotification.type === 'info' ? 'text-blue-600 hover:text-blue-900' : ''
 							]"
 						/>
 					</button>

@@ -30,6 +30,10 @@ export function useToast() {
 		showToastNotification(__("Validation Error"), message, "warning")
 	}
 
+	function showInfo(message) {
+		showToastNotification(__("Info"), message, "info")
+	}
+
 	function hideToast() {
 		showToast.value = false
 		setTimeout(() => {
@@ -43,6 +47,7 @@ export function useToast() {
 		showSuccess,
 		showError,
 		showWarning,
+		showInfo,
 		hideToast,
 	}
 }

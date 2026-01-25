@@ -429,30 +429,37 @@ def get_batch_serial_details(item_code, warehouse):
 		}
 
 		if has_batch_no:
-			# Get available batches (note: qty should come from get_batch_qty)
-			batches = frappe.db.sql(
-				"""
-				SELECT batch_no, batch_qty as qty, expiry_date
-				FROM `tabBatch`
-				WHERE item = %s AND batch_qty > 0
-				ORDER BY expiry_date ASC, creation ASC
-				""",
-				item_code,
-				as_dict=1,
+			# Get available batches using Query Builder
+			Batch = DocType("Batch")
+			batches = (
+				frappe.qb.from_(Batch)
+				.select(
+					Batch.name.as_("batch_no"),
+					Batch.batch_qty.as_("qty"),
+					Batch.expiry_date
+				)
+				.where(Batch.item == item_code)
+				.where(Batch.batch_qty > 0)
+				.orderby(Batch.expiry_date)
+				.orderby(Batch.creation)
+				.run(as_dict=True)
 			)
 			result["batches"] = batches
 
 		if has_serial_no:
-			# Get available serial numbers
-			serial_nos = frappe.db.sql(
-				"""
-				SELECT name as serial_no, warehouse
-				FROM `tabSerial No`
-				WHERE item_code = %s AND warehouse = %s AND status = 'Active'
-				ORDER BY creation ASC
-				""",
-				(item_code, warehouse),
-				as_dict=1,
+			# Get available serial numbers using Query Builder
+			SerialNo = DocType("Serial No")
+			serial_nos = (
+				frappe.qb.from_(SerialNo)
+				.select(
+					SerialNo.name.as_("serial_no"),
+					SerialNo.warehouse
+				)
+				.where(SerialNo.item_code == item_code)
+				.where(SerialNo.warehouse == warehouse)
+				.where(SerialNo.status == "Active")
+				.orderby(SerialNo.creation)
+				.run(as_dict=True)
 			)
 			result["serial_nos"] = serial_nos
 
@@ -506,19 +513,22 @@ def get_item_variants(template_item, pos_profile):
 			)
 			return []
 
-		# Get UOMs for all variants in a single query
+		# Get UOMs for all variants using Query Builder
 		variant_codes = [v["item_code"] for v in variants]
 		uom_map = {}
 		if variant_codes:
-			uoms = frappe.db.sql(
-				"""
-				SELECT parent, uom, conversion_factor
-				FROM `tabUOM Conversion Detail`
-				WHERE parent IN %s
-				ORDER BY parent, idx
-				""",
-				[variant_codes],
-				as_dict=1,
+			UOMConversion = DocType("UOM Conversion Detail")
+			uoms = (
+				frappe.qb.from_(UOMConversion)
+				.select(
+					UOMConversion.parent,
+					UOMConversion.uom,
+					UOMConversion.conversion_factor
+				)
+				.where(UOMConversion.parent.isin(variant_codes))
+				.orderby(UOMConversion.parent)
+				.orderby(UOMConversion.idx)
+				.run(as_dict=True)
 			)
 			for uom in uoms:
 				if uom["parent"] not in uom_map:
@@ -527,18 +537,22 @@ def get_item_variants(template_item, pos_profile):
 					{"uom": uom["uom"], "conversion_factor": uom["conversion_factor"]}
 				)
 
-		# Get all UOM-specific prices for variants
+		# Get all UOM-specific prices for variants using Query Builder
 		uom_prices_map = {}
 		if variant_codes:
-			prices = frappe.db.sql(
-				"""
-				SELECT item_code, uom, price_list_rate
-				FROM `tabItem Price`
-				WHERE item_code IN %s AND price_list = %s
-				ORDER BY item_code, uom
-				""",
-				[variant_codes, pos_profile_doc.selling_price_list],
-				as_dict=1,
+			ItemPrice = DocType("Item Price")
+			prices = (
+				frappe.qb.from_(ItemPrice)
+				.select(
+					ItemPrice.item_code,
+					ItemPrice.uom,
+					ItemPrice.price_list_rate
+				)
+				.where(ItemPrice.item_code.isin(variant_codes))
+				.where(ItemPrice.price_list == pos_profile_doc.selling_price_list)
+				.orderby(ItemPrice.item_code)
+				.orderby(ItemPrice.uom)
+				.run(as_dict=True)
 			)
 			for price in prices:
 				if price["item_code"] not in uom_prices_map:
@@ -558,17 +572,19 @@ def get_item_variants(template_item, pos_profile):
 					attributes_map[attr["parent"]] = {}
 				attributes_map[attr["parent"]][attr["attribute"]] = attr["attribute_value"]
 
-		# Batch query stock for all variants at once (performance optimization)
+		# Batch query stock for all variants at once using Query Builder
 		stock_map = {}
 		if variant_codes and pos_profile_doc.warehouse:
-			stocks = frappe.db.sql(
-				"""
-				SELECT item_code, actual_qty
-				FROM `tabBin`
-				WHERE item_code IN %s AND warehouse = %s
-				""",
-				[variant_codes, pos_profile_doc.warehouse],
-				as_dict=1,
+			Bin = DocType("Bin")
+			stocks = (
+				frappe.qb.from_(Bin)
+				.select(
+					Bin.item_code,
+					Bin.actual_qty
+				)
+				.where(Bin.item_code.isin(variant_codes))
+				.where(Bin.warehouse == pos_profile_doc.warehouse)
+				.run(as_dict=True)
 			)
 			stock_map = {s["item_code"]: s["actual_qty"] for s in stocks}
 
@@ -1059,34 +1075,40 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 				if row.uom:
 					conversion_map[row.parent][row.uom] = row.conversion_factor
 
-		# UOM-specific prices - batch query ALL prices for all items
+		# UOM-specific prices - batch query ALL prices for all items using Query Builder
 		if item_codes:
-			prices = frappe.db.sql(
-				"""
-				SELECT item_code, uom, price_list_rate
-				FROM `tabItem Price`
-				WHERE item_code IN %s AND price_list = %s
-				ORDER BY item_code, uom
-				""",
-				[item_codes, pos_profile_doc.selling_price_list],
-				as_dict=1,
+			ItemPrice = DocType("Item Price")
+			prices = (
+				frappe.qb.from_(ItemPrice)
+				.select(
+					ItemPrice.item_code,
+					ItemPrice.uom,
+					ItemPrice.price_list_rate
+				)
+				.where(ItemPrice.item_code.isin(item_codes))
+				.where(ItemPrice.price_list == pos_profile_doc.selling_price_list)
+				.orderby(ItemPrice.item_code)
+				.orderby(ItemPrice.uom)
+				.run(as_dict=True)
 			)
 			for price in prices:
 				uom_prices_map.setdefault(price["item_code"], {})[price["uom"]] = price["price_list_rate"]
 
-		# Batch query stock for all items at once (performance optimization)
+		# Batch query stock for all items at once using Query Builder
 		stock_map = {}
 		if item_codes and pos_profile_doc.warehouse:
 			stock_items = [item["item_code"] for item in items if item.get("is_stock_item")]
 			if stock_items:
-				stocks = frappe.db.sql(
-					"""
-					SELECT item_code, actual_qty
-					FROM `tabBin`
-					WHERE item_code IN %s AND warehouse = %s
-					""",
-					[stock_items, pos_profile_doc.warehouse],
-					as_dict=1,
+				Bin = DocType("Bin")
+				stocks = (
+					frappe.qb.from_(Bin)
+					.select(
+						Bin.item_code,
+						Bin.actual_qty
+					)
+					.where(Bin.item_code.isin(stock_items))
+					.where(Bin.warehouse == pos_profile_doc.warehouse)
+					.run(as_dict=True)
 				)
 				stock_map = {s["item_code"]: s["actual_qty"] for s in stocks}
 
@@ -1145,17 +1167,16 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 			# 3) If still not found and it's a template, derive min variant price
 			derived_price = None
 			if not price_row and item.get("has_variants"):
-				variant_prices = frappe.db.sql(
-					"""
-					SELECT MIN(ip.price_list_rate) as min_price
-					FROM `tabItem Price` ip
-					INNER JOIN `tabItem` i ON i.name = ip.item_code
-					WHERE i.variant_of = %s
-					AND ip.price_list = %s
-					AND i.disabled = 0
-					""",
-					[item["item_code"], pos_profile_doc.selling_price_list],
-					as_dict=1,
+				ItemPrice = DocType("Item Price")
+				Item = DocType("Item")
+				variant_prices = (
+					frappe.qb.from_(ItemPrice)
+					.inner_join(Item).on(Item.name == ItemPrice.item_code)
+					.select(fn.Min(ItemPrice.price_list_rate).as_("min_price"))
+					.where(Item.variant_of == item["item_code"])
+					.where(ItemPrice.price_list == pos_profile_doc.selling_price_list)
+					.where(Item.disabled == 0)
+					.run(as_dict=True)
 				)
 				derived_price = (
 					variant_prices[0]["min_price"]
@@ -1318,16 +1339,15 @@ def get_item_details(item_code, pos_profile, customer=None, qty=1, uom=None):  #
 def get_item_groups(pos_profile):
 	"""Get item groups for filtering"""
 	try:
-		# Get item groups from POS Profile's item groups table
-		item_groups = frappe.db.sql(
-			"""
-			SELECT DISTINCT ig.item_group
-			FROM `tabPOS Item Group` ig
-			WHERE ig.parent = %s
-			ORDER BY ig.item_group
-			""",
-			pos_profile,
-			as_dict=1,
+		# Get item groups from POS Profile's item groups table using Query Builder
+		POSItemGroup = DocType("POS Item Group")
+		item_groups = (
+			frappe.qb.from_(POSItemGroup)
+			.select(POSItemGroup.item_group)
+			.distinct()
+			.where(POSItemGroup.parent == pos_profile)
+			.orderby(POSItemGroup.item_group)
+			.run(as_dict=True)
 		)
 
 		# If no item groups defined in POS Profile, get all item groups
@@ -1396,23 +1416,19 @@ def get_stock_quantities(item_codes, warehouse):
 		if not warehouses:
 			return []
 
-		# Batch query for stock quantities across all relevant warehouses
-		stock_rows = frappe.db.sql(
-			"""
-			SELECT
-				item_code,
-				COALESCE(SUM(actual_qty), 0) AS actual_qty,
-				COALESCE(SUM(reserved_qty), 0) AS reserved_qty
-			FROM `tabBin`
-			WHERE item_code IN %(item_codes)s
-			AND warehouse IN %(warehouses)s
-			GROUP BY item_code
-			""",
-			{
-				"item_codes": tuple(normalized_codes),
-				"warehouses": tuple(warehouses),
-			},
-			as_dict=1,
+		# Batch query for stock quantities across all relevant warehouses using Query Builder
+		Bin = DocType("Bin")
+		stock_rows = (
+			frappe.qb.from_(Bin)
+			.select(
+				Bin.item_code,
+				fn.Coalesce(fn.Sum(Bin.actual_qty), 0).as_("actual_qty"),
+				fn.Coalesce(fn.Sum(Bin.reserved_qty), 0).as_("reserved_qty")
+			)
+			.where(Bin.item_code.isin(normalized_codes))
+			.where(Bin.warehouse.isin(warehouses))
+			.groupby(Bin.item_code)
+			.run(as_dict=True)
 		)
 
 		# Create a lookup for items that have stock entries

@@ -607,9 +607,9 @@ def get_item_variants(template_item, pos_profile):
 def _build_item_base_conditions(pos_profile_doc, item_group=None):
 	"""Build reusable SQL conditions for POS item search."""
 	conditions = [
-		"disabled = 0",
-		"is_sales_item = 1",
-		"IFNULL(variant_of, '') = ''",
+		"i.disabled = 0",
+		"i.is_sales_item = 1",
+		"IFNULL(i.variant_of, '') = ''",
 	]
 	params = []
 
@@ -953,12 +953,6 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 	try:
 		pos_profile_doc = frappe.get_cached_doc("POS Profile", pos_profile)
 
-		filters = {
-			"disabled": 0,
-			"is_sales_item": 1,  # Only show items with "Allow Sales" enabled
-			"ifnull(variant_of, '')": "",  # Exclude items that are variants of a template
-		}
-
 		# Try to resolve weighted/priced barcodes if barcode_resolver is available
 		resolved_barcode_data = None
 		effective_search_term = search_term
@@ -976,12 +970,6 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 
 		# Add company filter - show items for specific company + global items (empty company)
 		# Global items (custom_company is empty) are available to all companies
-		if pos_profile_doc.company:
-			filters["ifnull(custom_company, '')"] = ["in", [pos_profile_doc.company, ""]]
-
-		# Add item group filter if provided
-		if item_group:
-			filters["item_group"] = item_group
 
 		# Build base conditions
 		conditions, params = _build_item_base_conditions(pos_profile_doc, item_group)
@@ -1051,7 +1039,6 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 
 		# Prepare maps for enrichment
 		item_codes = [item["item_code"] for item in items]
-		barcode_map = {item_code: [] for item_code in item_codes}  # item_code -> barcodes list
 		conversion_map = defaultdict(dict)  # parent -> {uom: factor}
 		uom_map = {}  # parent -> [ {uom, conversion_factor}, ... ]
 		uom_prices_map = {}  # item_code -> {uom: price_list_rate}

@@ -3,200 +3,697 @@
 
 import frappe
 from frappe import _
-from frappe.utils import flt
+from frappe.utils import flt, cint, time_diff_in_hours, getdate
 
 
 def execute(filters=None):
+	filters = filters or {}
+	data = get_shift_data(filters)
 	columns = get_columns()
-	data = get_data(filters)
-	return columns, data
+	summary = get_summary(data)
+	chart = get_chart(data)
+	return columns, data, summary, chart
 
+
+# =============================================================================
+# COLUMNS
+# =============================================================================
 
 def get_columns():
-	"""Return columns for the report"""
 	return [
-		{
-			"fieldname": "shift",
-			"label": _("Shift"),
-			"fieldtype": "Link",
-			"options": "POS Closing Shift",
-			"width": 150
-		},
-		{
-			"fieldname": "pos_profile",
-			"label": _("POS Profile"),
-			"fieldtype": "Link",
-			"options": "POS Profile",
-			"width": 150
-		},
-		{
-			"fieldname": "cashier",
-			"label": _("Cashier"),
-			"fieldtype": "Link",
-			"options": "User",
-			"width": 150
-		},
-		{
-			"fieldname": "period_start_date",
-			"label": _("Shift Start"),
-			"fieldtype": "Datetime",
-			"width": 150
-		},
-		{
-			"fieldname": "period_end_date",
-			"label": _("Shift End"),
-			"fieldtype": "Datetime",
-			"width": 150
-		},
-		{
-			"fieldname": "total_sales",
-			"label": _("Total Sales"),
-			"fieldtype": "Currency",
-			"width": 130
-		},
-		{
-			"fieldname": "invoice_count",
-			"label": _("Invoice Count"),
-			"fieldtype": "Int",
-			"width": 110
-		},
-		{
-			"fieldname": "average_ticket_size",
-			"label": _("Avg Ticket Size"),
-			"fieldtype": "Currency",
-			"width": 130
-		},
-		{
-			"fieldname": "total_discounts",
-			"label": _("Total Discounts"),
-			"fieldtype": "Currency",
-			"width": 130
-		},
-		{
-			"fieldname": "discount_percentage",
-			"label": _("Discount %"),
-			"fieldtype": "Percent",
-			"width": 100
-		},
-		{
-			"fieldname": "return_count",
-			"label": _("Returns"),
-			"fieldtype": "Int",
-			"width": 90
-		},
-		{
-			"fieldname": "return_amount",
-			"label": _("Return Amount"),
-			"fieldtype": "Currency",
-			"width": 130
-		},
-		{
-			"fieldname": "net_sales",
-			"label": _("Net Sales"),
-			"fieldtype": "Currency",
-			"width": 130
-		},
-		{
-			"fieldname": "efficiency_score",
-			"label": _("Efficiency Score"),
-			"fieldtype": "Percent",
-			"width": 120
-		}
+		# Shift Identity
+		{"fieldname": "shift_id", "label": _("Shift ID"), "fieldtype": "Link", "options": "POS Closing Shift", "width": 120},
+		{"fieldname": "shift_date", "label": _("Date"), "fieldtype": "Date", "width": 100},
+		{"fieldname": "shift_start", "label": _("Start"), "fieldtype": "Data", "width": 70},
+		{"fieldname": "shift_end", "label": _("End"), "fieldtype": "Data", "width": 70},
+		{"fieldname": "duration_hrs", "label": _("Hours"), "fieldtype": "Float", "precision": 1, "width": 70},
+
+		# People
+		{"fieldname": "pos_profile", "label": _("POS Profile"), "fieldtype": "Link", "options": "POS Profile", "width": 120},
+		{"fieldname": "cashier", "label": _("Cashier"), "fieldtype": "Data", "width": 120},
+		{"fieldname": "sales_person", "label": _("Sales Person"), "fieldtype": "Data", "width": 120},
+
+		# Sales Metrics
+		{"fieldname": "gross_sales", "label": _("Gross Sales"), "fieldtype": "Currency", "width": 110},
+		{"fieldname": "returns", "label": _("Returns"), "fieldtype": "Currency", "width": 100},
+		{"fieldname": "net_sales", "label": _("Net Sales"), "fieldtype": "Currency", "width": 110},
+		{"fieldname": "discounts", "label": _("Discounts"), "fieldtype": "Currency", "width": 100},
+
+		# Volume Metrics
+		{"fieldname": "invoices", "label": _("Invoices"), "fieldtype": "Int", "width": 80},
+		{"fieldname": "qty_sold", "label": _("Items"), "fieldtype": "Int", "width": 70},
+		{"fieldname": "customers", "label": _("Customers"), "fieldtype": "Int", "width": 90},
+
+		# Payment Breakdown
+		{"fieldname": "cash", "label": _("Cash"), "fieldtype": "Currency", "width": 100},
+		{"fieldname": "non_cash", "label": _("Non-Cash"), "fieldtype": "Currency", "width": 100},
+
+		# Performance Metrics
+		{"fieldname": "avg_ticket", "label": _("Avg Ticket"), "fieldtype": "Currency", "width": 100},
+		{"fieldname": "sales_per_hour", "label": _("Sales/Hr"), "fieldtype": "Currency", "width": 100},
+		{"fieldname": "invoices_per_hour", "label": _("Inv/Hr"), "fieldtype": "Float", "precision": 1, "width": 70},
+
+		# Analysis
+		{"fieldname": "peak_hour", "label": _("Peak Hour"), "fieldtype": "Data", "width": 90},
+		{"fieldname": "return_rate", "label": _("Return %"), "fieldtype": "Percent", "width": 80},
+		{"fieldname": "discount_rate", "label": _("Disc %"), "fieldtype": "Percent", "width": 80},
+		{"fieldname": "efficiency", "label": _("Efficiency"), "fieldtype": "Percent", "width": 90},
+		{"fieldname": "rating", "label": _("Rating"), "fieldtype": "Data", "width": 110},
 	]
 
 
-def get_data(filters):
-	"""Get report data based on filters"""
-	conditions = get_conditions(filters)
+# =============================================================================
+# DATA FETCHING
+# =============================================================================
+
+def get_shift_data(filters):
+	"""Fetch and process shift data with all metrics"""
+
+	# Get base shift data with aggregated invoice metrics
+	shifts = fetch_shifts_with_invoices(filters)
+
+	if not shifts:
+		return []
+
+	# Fetch payment data in batch
+	payment_data = fetch_payment_data_batch(shifts)
+
+	# Fetch sales person data in batch
+	salesperson_data = fetch_salesperson_data_batch(shifts)
+
+	# Fetch peak hours in batch
+	peak_hour_data = fetch_peak_hours_batch(shifts)
+
+	# Fetch cashier names in batch
+	cashier_ids = list(set(s.cashier_id for s in shifts if s.cashier_id))
+	cashier_names = {}
+	if cashier_ids:
+		cashier_names = {
+			u.name: u.full_name
+			for u in frappe.get_all("User", filters={"name": ["in", cashier_ids]}, fields=["name", "full_name"])
+		}
+
+	# Calculate dataset statistics for relative efficiency scoring
+	stats = calculate_statistics(shifts)
+
+	# Enrich each shift with computed fields
+	for shift in shifts:
+		enrich_shift_data(shift, payment_data, salesperson_data, peak_hour_data, cashier_names, stats)
+
+	# Apply sales person filter (post-processing)
+	if filters.get("sales_person"):
+		sp_filter = filters.get("sales_person")
+		shifts = [s for s in shifts if sp_filter in (s.sales_person or "")]
+
+	return shifts
+
+
+def fetch_shifts_with_invoices(filters):
+	"""Fetch shifts with aggregated invoice data in a single query"""
+
+	conditions = build_conditions(filters)
 
 	query = """
 		SELECT
-			pcs.name as shift,
+			pcs.name AS shift_id,
 			pcs.pos_profile,
-			pcs.user as cashier,
+			pcs.user AS cashier_id,
 			pcs.period_start_date,
 			pcs.period_end_date,
-			COALESCE(SUM(CASE WHEN si.is_return = 0 THEN si.grand_total ELSE 0 END), 0) as total_sales,
-			COUNT(CASE WHEN si.is_return = 0 THEN si.name END) as invoice_count,
-			COALESCE(SUM(CASE WHEN si.is_return = 0 THEN si.discount_amount ELSE 0 END), 0) as total_discounts,
-			COUNT(CASE WHEN si.is_return = 1 THEN si.name END) as return_count,
-			COALESCE(SUM(CASE WHEN si.is_return = 1 THEN ABS(si.grand_total) ELSE 0 END), 0) as return_amount
+			pcs.pos_opening_shift,
+
+			COALESCE(SUM(CASE WHEN si.is_return = 0 THEN si.grand_total ELSE 0 END), 0) AS gross_sales,
+			COALESCE(SUM(CASE WHEN si.is_return = 1 THEN ABS(si.grand_total) ELSE 0 END), 0) AS returns,
+			COALESCE(SUM(CASE WHEN si.is_return = 0 THEN si.discount_amount ELSE 0 END), 0) AS discounts,
+			COALESCE(SUM(CASE WHEN si.is_return = 0 THEN si.total_qty ELSE 0 END), 0) AS qty_sold,
+
+			COUNT(CASE WHEN si.is_return = 0 THEN 1 END) AS invoices,
+			COUNT(CASE WHEN si.is_return = 1 THEN 1 END) AS return_count,
+			COUNT(DISTINCT CASE WHEN si.is_return = 0 THEN si.customer END) AS customers
+
 		FROM `tabPOS Closing Shift` pcs
-		LEFT JOIN `tabSales Invoice` si ON (
-			(si.posa_pos_opening_shift = pcs.pos_opening_shift)
-			OR (
-				si.pos_profile = pcs.pos_profile
-				AND si.owner = pcs.user
-				AND si.posting_date >= DATE(pcs.period_start_date)
-				AND si.posting_date <= DATE(pcs.period_end_date)
+		LEFT JOIN `tabSales Invoice` si ON
+			si.docstatus = 1
+			AND si.is_pos = 1
+			AND (
+				si.posa_pos_opening_shift = pcs.pos_opening_shift
+				OR (
+					si.pos_profile = pcs.pos_profile
+					AND si.owner = pcs.user
+					AND si.posting_date BETWEEN DATE(pcs.period_start_date) AND DATE(pcs.period_end_date)
+				)
 			)
-		)
-		AND si.docstatus = 1
-		AND si.is_pos = 1
 		WHERE pcs.docstatus = 1
 		{conditions}
-		GROUP BY pcs.name, pcs.pos_profile, pcs.user, pcs.period_start_date, pcs.period_end_date
+		GROUP BY pcs.name
 		ORDER BY pcs.period_start_date DESC
 	""".format(conditions=conditions)
 
-	data = frappe.db.sql(query, filters, as_dict=1)
-
-	# Calculate derived fields
-	for row in data:
-		# Average ticket size
-		if row.invoice_count > 0:
-			row.average_ticket_size = flt(row.total_sales / row.invoice_count, 2)
-		else:
-			row.average_ticket_size = 0
-
-		# Discount percentage
-		if row.total_sales > 0:
-			row.discount_percentage = flt((row.total_discounts / row.total_sales) * 100, 2)
-		else:
-			row.discount_percentage = 0
-
-		# Net sales (sales minus returns)
-		row.net_sales = flt(row.total_sales - row.return_amount, 2)
-
-		# Efficiency score (based on sales volume, low returns, and reasonable discounts)
-		base_efficiency = 100
-
-		# Penalize for returns (returns > 10% of sales reduces efficiency)
-		if row.total_sales > 0:
-			return_ratio = (row.return_amount / row.total_sales) * 100
-			if return_ratio > 10:
-				base_efficiency -= (return_ratio - 10) * 2  # Deduct 2% for each % above 10%
-
-		# Penalize for excessive discounts (discounts > 15% reduces efficiency)
-		if row.discount_percentage > 15:
-			base_efficiency -= (row.discount_percentage - 15)  # Deduct 1% for each % above 15%
-
-		# Bonus for high ticket size (if avg ticket > 1000, add bonus)
-		if row.average_ticket_size > 1000:
-			base_efficiency += min((row.average_ticket_size / 1000) * 2, 10)  # Max 10% bonus
-
-		row.efficiency_score = max(0, min(100, flt(base_efficiency, 2)))  # Cap between 0-100
-
-	return data
+	return frappe.db.sql(query, filters, as_dict=True)
 
 
-def get_conditions(filters):
-	"""Build WHERE conditions from filters"""
+def build_conditions(filters):
+	"""Build SQL WHERE conditions"""
 	conditions = []
 
 	if filters.get("from_date"):
 		conditions.append("pcs.period_start_date >= %(from_date)s")
-
 	if filters.get("to_date"):
 		conditions.append("pcs.period_end_date <= %(to_date)s")
-
 	if filters.get("pos_profile"):
 		conditions.append("pcs.pos_profile = %(pos_profile)s")
-
 	if filters.get("cashier"):
 		conditions.append("pcs.user = %(cashier)s")
-
 	if filters.get("shift"):
 		conditions.append("pcs.name = %(shift)s")
 
 	return "AND " + " AND ".join(conditions) if conditions else ""
+
+
+# =============================================================================
+# BATCH DATA FETCHING
+# =============================================================================
+
+def fetch_payment_data_batch(shifts):
+	"""Fetch payment breakdown for all shifts in one query"""
+	if not shifts:
+		return {}
+
+	# Build conditions for all shifts
+	shift_conditions = []
+	params = {}
+
+	for i, shift in enumerate(shifts):
+		param_prefix = f"s{i}_"
+		shift_conditions.append(f"""(
+			si.posa_pos_opening_shift = %({param_prefix}pos_opening)s
+			OR (
+				si.pos_profile = %({param_prefix}profile)s
+				AND si.owner = %({param_prefix}cashier)s
+				AND si.posting_date BETWEEN DATE(%({param_prefix}start)s) AND DATE(%({param_prefix}end)s)
+			)
+		)""")
+		params[f"{param_prefix}pos_opening"] = shift.pos_opening_shift
+		params[f"{param_prefix}profile"] = shift.pos_profile
+		params[f"{param_prefix}cashier"] = shift.cashier_id
+		params[f"{param_prefix}start"] = shift.period_start_date
+		params[f"{param_prefix}end"] = shift.period_end_date
+
+	# For simplicity, fetch per-shift (batch would be complex with OR conditions)
+	result = {}
+	for shift in shifts:
+		result[shift.shift_id] = fetch_payment_data_single(shift)
+
+	return result
+
+
+def fetch_payment_data_single(shift):
+	"""Fetch payment data for a single shift"""
+	query = """
+		SELECT
+			LOWER(sip.mode_of_payment) AS mode,
+			SUM(sip.amount) AS amount
+		FROM `tabSales Invoice Payment` sip
+		INNER JOIN `tabSales Invoice` si ON si.name = sip.parent
+		WHERE si.docstatus = 1 AND si.is_pos = 1 AND si.is_return = 0
+		AND (
+			si.posa_pos_opening_shift = %(pos_opening)s
+			OR (
+				si.pos_profile = %(profile)s
+				AND si.owner = %(cashier)s
+				AND si.posting_date BETWEEN DATE(%(start)s) AND DATE(%(end)s)
+			)
+		)
+		GROUP BY LOWER(sip.mode_of_payment)
+	"""
+
+	payments = frappe.db.sql(query, {
+		"pos_opening": shift.pos_opening_shift,
+		"profile": shift.pos_profile,
+		"cashier": shift.cashier_id,
+		"start": shift.period_start_date,
+		"end": shift.period_end_date
+	}, as_dict=True)
+
+	cash = 0
+	non_cash = 0
+	for p in payments:
+		if "cash" in (p.mode or ""):
+			cash += flt(p.amount)
+		else:
+			non_cash += flt(p.amount)
+
+	return {"cash": cash, "non_cash": non_cash}
+
+
+def fetch_salesperson_data_batch(shifts):
+	"""Fetch sales person data for all shifts"""
+	result = {}
+	for shift in shifts:
+		result[shift.shift_id] = fetch_salesperson_data_single(shift)
+	return result
+
+
+def fetch_salesperson_data_single(shift):
+	"""Fetch sales person data for a single shift"""
+	query = """
+		SELECT
+			st.sales_person,
+			SUM(st.allocated_amount) AS contribution
+		FROM `tabSales Team` st
+		INNER JOIN `tabSales Invoice` si ON si.name = st.parent
+		WHERE si.docstatus = 1 AND si.is_pos = 1 AND si.is_return = 0
+		AND (
+			si.posa_pos_opening_shift = %(pos_opening)s
+			OR (
+				si.pos_profile = %(profile)s
+				AND si.owner = %(cashier)s
+				AND si.posting_date BETWEEN DATE(%(start)s) AND DATE(%(end)s)
+			)
+		)
+		GROUP BY st.sales_person
+		ORDER BY contribution DESC
+	"""
+
+	sales_persons = frappe.db.sql(query, {
+		"pos_opening": shift.pos_opening_shift,
+		"profile": shift.pos_profile,
+		"cashier": shift.cashier_id,
+		"start": shift.period_start_date,
+		"end": shift.period_end_date
+	}, as_dict=True)
+
+	if not sales_persons:
+		return {"names": "", "contribution": 0}
+
+	# Get names
+	names = []
+	total = 0
+	for sp in sales_persons[:3]:  # Top 3
+		sp_name = frappe.db.get_value("Sales Person", sp.sales_person, "sales_person_name") or sp.sales_person
+		names.append(sp_name)
+		total += flt(sp.contribution)
+
+	# Add remaining contribution
+	for sp in sales_persons[3:]:
+		total += flt(sp.contribution)
+
+	name_str = ", ".join(names)
+	if len(sales_persons) > 3:
+		name_str += f" +{len(sales_persons) - 3}"
+
+	return {"names": name_str, "contribution": total}
+
+
+def fetch_peak_hours_batch(shifts):
+	"""Fetch peak hour for all shifts"""
+	result = {}
+	for shift in shifts:
+		result[shift.shift_id] = fetch_peak_hour_single(shift)
+	return result
+
+
+def fetch_peak_hour_single(shift):
+	"""Fetch peak hour for a single shift"""
+	query = """
+		SELECT HOUR(si.posting_time) AS hour, SUM(si.grand_total) AS total
+		FROM `tabSales Invoice` si
+		WHERE si.docstatus = 1 AND si.is_pos = 1 AND si.is_return = 0
+		AND (
+			si.posa_pos_opening_shift = %(pos_opening)s
+			OR (
+				si.pos_profile = %(profile)s
+				AND si.owner = %(cashier)s
+				AND si.posting_date BETWEEN DATE(%(start)s) AND DATE(%(end)s)
+			)
+		)
+		GROUP BY HOUR(si.posting_time)
+		ORDER BY total DESC
+		LIMIT 1
+	"""
+
+	result = frappe.db.sql(query, {
+		"pos_opening": shift.pos_opening_shift,
+		"profile": shift.pos_profile,
+		"cashier": shift.cashier_id,
+		"start": shift.period_start_date,
+		"end": shift.period_end_date
+	}, as_dict=True)
+
+	if result and result[0].hour is not None:
+		h = cint(result[0].hour)
+		return f"{h:02d}:00"
+	return ""
+
+
+# =============================================================================
+# DATA ENRICHMENT
+# =============================================================================
+
+def enrich_shift_data(shift, payment_data, salesperson_data, peak_hour_data, cashier_names, stats):
+	"""Add computed fields to shift data"""
+
+	# Time fields
+	if shift.period_start_date:
+		shift.shift_date = getdate(shift.period_start_date)
+		shift.shift_start = shift.period_start_date.strftime("%H:%M") if hasattr(shift.period_start_date, 'strftime') else ""
+	else:
+		shift.shift_date = None
+		shift.shift_start = ""
+
+	if shift.period_end_date:
+		shift.shift_end = shift.period_end_date.strftime("%H:%M") if hasattr(shift.period_end_date, 'strftime') else ""
+	else:
+		shift.shift_end = ""
+
+	# Duration
+	if shift.period_start_date and shift.period_end_date:
+		shift.duration_hrs = flt(time_diff_in_hours(shift.period_end_date, shift.period_start_date), 1)
+	else:
+		shift.duration_hrs = 0
+
+	# Cashier name
+	shift.cashier = cashier_names.get(shift.cashier_id) or shift.cashier_id or ""
+
+	# Net sales
+	shift.net_sales = flt(shift.gross_sales - shift.returns, 2)
+
+	# Payment breakdown
+	payments = payment_data.get(shift.shift_id, {})
+	shift.cash = flt(payments.get("cash", 0), 2)
+	shift.non_cash = flt(payments.get("non_cash", 0), 2)
+
+	# Sales person
+	sp_data = salesperson_data.get(shift.shift_id, {})
+	shift.sales_person = sp_data.get("names", "")
+
+	# Peak hour
+	shift.peak_hour = peak_hour_data.get(shift.shift_id, "")
+
+	# Performance metrics
+	if shift.invoices > 0:
+		shift.avg_ticket = flt(shift.gross_sales / shift.invoices, 2)
+	else:
+		shift.avg_ticket = 0
+
+	if shift.duration_hrs > 0:
+		shift.sales_per_hour = flt(shift.gross_sales / shift.duration_hrs, 2)
+		shift.invoices_per_hour = flt(shift.invoices / shift.duration_hrs, 1)
+	else:
+		shift.sales_per_hour = 0
+		shift.invoices_per_hour = 0
+
+	# Rates
+	if shift.gross_sales > 0:
+		shift.return_rate = flt((shift.returns / shift.gross_sales) * 100, 1)
+		shift.discount_rate = flt((shift.discounts / shift.gross_sales) * 100, 1)
+	else:
+		shift.return_rate = 0
+		shift.discount_rate = 0
+
+	# Efficiency and rating
+	shift.efficiency = calculate_efficiency(shift, stats)
+	shift.rating = get_rating(shift.efficiency, shift.gross_sales)
+
+
+# =============================================================================
+# EFFICIENCY CALCULATION
+# =============================================================================
+
+def calculate_statistics(shifts):
+	"""Calculate dataset statistics for relative comparisons"""
+	active_shifts = [s for s in shifts if s.gross_sales > 0]
+
+	if not active_shifts:
+		return {"avg_ticket": 0, "avg_invoices_per_hour": 0}
+
+	# Calculate averages
+	total_sales = sum(s.gross_sales for s in active_shifts)
+	total_invoices = sum(s.invoices for s in active_shifts)
+
+	avg_ticket = total_sales / total_invoices if total_invoices > 0 else 0
+
+	# Average invoices per hour (only for shifts with duration)
+	shifts_with_duration = [s for s in active_shifts if s.period_start_date and s.period_end_date]
+	if shifts_with_duration:
+		total_hours = sum(time_diff_in_hours(s.period_end_date, s.period_start_date) for s in shifts_with_duration)
+		total_inv = sum(s.invoices for s in shifts_with_duration)
+		avg_inv_per_hour = total_inv / total_hours if total_hours > 0 else 0
+	else:
+		avg_inv_per_hour = 0
+
+	return {
+		"avg_ticket": avg_ticket,
+		"avg_invoices_per_hour": avg_inv_per_hour
+	}
+
+
+def calculate_efficiency(shift, stats):
+	"""Calculate efficiency score (0-100) using relative comparisons"""
+	score = 70  # Base score
+
+	# Factor 1: Return rate penalty/bonus (-20 to +5)
+	if shift.return_rate > 15:
+		score -= min(20, (shift.return_rate - 15) * 2)
+	elif shift.return_rate <= 5:
+		score += 5
+
+	# Factor 2: Discount rate penalty/bonus (-10 to +5)
+	if shift.discount_rate > 20:
+		score -= min(10, (shift.discount_rate - 20))
+	elif shift.discount_rate <= 5:
+		score += 5
+
+	# Factor 3: Ticket size vs average (-5 to +10)
+	avg_ticket = stats.get("avg_ticket", 0)
+	if avg_ticket > 0 and shift.avg_ticket > 0:
+		ratio = shift.avg_ticket / avg_ticket
+		if ratio >= 1.5:
+			score += 10
+		elif ratio >= 1.2:
+			score += 5
+		elif ratio < 0.7:
+			score -= 5
+
+	# Factor 4: Productivity vs average (-5 to +10)
+	avg_inv_hr = stats.get("avg_invoices_per_hour", 0)
+	if avg_inv_hr > 0 and shift.invoices_per_hour > 0:
+		ratio = shift.invoices_per_hour / avg_inv_hr
+		if ratio >= 1.5:
+			score += 10
+		elif ratio >= 1.2:
+			score += 5
+		elif ratio < 0.7:
+			score -= 5
+
+	return max(0, min(100, flt(score, 1)))
+
+
+def get_rating(efficiency, gross_sales):
+	"""Get rating label based on efficiency"""
+	if gross_sales == 0:
+		return ""
+	if efficiency >= 90:
+		return "Excellent"
+	if efficiency >= 75:
+		return "Good"
+	if efficiency >= 60:
+		return "Average"
+	return "Needs Improvement"
+
+
+# =============================================================================
+# SUMMARY
+# =============================================================================
+
+def get_summary(data):
+	"""Generate report summary cards"""
+	if not data:
+		return None
+
+	total_shifts = len(data)
+	total_gross = sum(d.gross_sales for d in data)
+	total_net = sum(d.net_sales for d in data)
+	total_invoices = sum(d.invoices for d in data)
+	total_items = sum(d.qty_sold for d in data)
+	total_customers = sum(d.customers for d in data)
+	total_returns = sum(d.returns for d in data)
+	total_discounts = sum(d.discounts for d in data)
+	total_cash = sum(d.cash for d in data)
+	total_non_cash = sum(d.non_cash for d in data)
+
+	avg_efficiency = sum(d.efficiency for d in data) / total_shifts if total_shifts else 0
+	avg_ticket = total_gross / total_invoices if total_invoices else 0
+
+	excellent = len([d for d in data if d.rating == "Excellent"])
+	good = len([d for d in data if d.rating == "Good"])
+
+	return [
+		{"value": total_shifts, "label": _("Shifts"), "datatype": "Int", "indicator": "Blue"},
+		{"value": total_gross, "label": _("Gross Sales"), "datatype": "Currency", "indicator": "Green"},
+		{"value": total_net, "label": _("Net Sales"), "datatype": "Currency", "indicator": "Green"},
+		{"value": total_invoices, "label": _("Invoices"), "datatype": "Int", "indicator": "Blue"},
+		{"value": total_items, "label": _("Items Sold"), "datatype": "Int", "indicator": "Blue"},
+		{"value": total_customers, "label": _("Customers"), "datatype": "Int", "indicator": "Blue"},
+		{"value": avg_ticket, "label": _("Avg Ticket"), "datatype": "Currency", "indicator": "Purple"},
+		{"value": total_cash, "label": _("Cash"), "datatype": "Currency", "indicator": "Orange"},
+		{"value": total_non_cash, "label": _("Non-Cash"), "datatype": "Currency", "indicator": "Purple"},
+		{"value": total_returns, "label": _("Returns"), "datatype": "Currency", "indicator": "Red"},
+		{"value": total_discounts, "label": _("Discounts"), "datatype": "Currency", "indicator": "Orange"},
+		{"value": avg_efficiency, "label": _("Avg Efficiency"), "datatype": "Percent",
+		 "indicator": "Green" if avg_efficiency >= 75 else "Orange" if avg_efficiency >= 50 else "Red"},
+		{"value": excellent + good, "label": _("High Performers"), "datatype": "Int", "indicator": "Green"},
+	]
+
+
+# =============================================================================
+# CHART
+# =============================================================================
+
+def get_chart(data):
+	"""Generate default chart - Sales performance by shift with efficiency overlay"""
+	if not data:
+		return None
+
+	# Get recent shifts, sorted by date
+	recent = sorted(data[:20], key=lambda x: x.shift_date or "", reverse=False)[-15:]
+
+	if not recent:
+		return None
+
+	# Build labels: Date + Cashier first name
+	labels = []
+	for d in recent:
+		date_str = d.shift_date.strftime("%d/%m") if hasattr(d.shift_date, 'strftime') else ""
+		cashier_short = (d.cashier or "").split()[0][:8] if d.cashier else ""
+		if date_str and cashier_short:
+			labels.append(f"{date_str} {cashier_short}")
+		elif date_str:
+			labels.append(date_str)
+		else:
+			labels.append(d.shift_id[:8] if d.shift_id else "-")
+
+	return {
+		"data": {
+			"labels": labels,
+			"datasets": [
+				{
+					"name": _("Net Sales"),
+					"values": [flt(d.net_sales) for d in recent],
+					"chartType": "bar"
+				},
+				{
+					"name": _("Invoices"),
+					"values": [d.invoices for d in recent],
+					"chartType": "line"
+				}
+			]
+		},
+		"type": "axis-mixed",
+		"colors": ["#28a745", "#5e64ff"],
+		"height": 300,
+		"axisOptions": {
+			"xIsSeries": True
+		},
+		"barOptions": {
+			"spaceRatio": 0.4
+		},
+		"lineOptions": {
+			"dotSize": 4
+		}
+	}
+
+
+# =============================================================================
+# API ENDPOINTS FOR CHARTS
+# =============================================================================
+
+@frappe.whitelist()
+def get_hourly_breakdown(filters):
+	"""Get hourly sales breakdown"""
+	filters = frappe.parse_json(filters) if isinstance(filters, str) else filters
+
+	conditions = []
+	if filters.get("from_date"):
+		conditions.append("si.posting_date >= %(from_date)s")
+	if filters.get("to_date"):
+		conditions.append("si.posting_date <= %(to_date)s")
+	if filters.get("pos_profile"):
+		conditions.append("si.pos_profile = %(pos_profile)s")
+	if filters.get("cashier"):
+		conditions.append("si.owner = %(cashier)s")
+
+	where = " AND " + " AND ".join(conditions) if conditions else ""
+
+	return frappe.db.sql("""
+		SELECT
+			HOUR(si.posting_time) AS hour,
+			COUNT(*) AS invoice_count,
+			SUM(si.grand_total) AS total_sales
+		FROM `tabSales Invoice` si
+		WHERE si.docstatus = 1 AND si.is_pos = 1 AND si.is_return = 0
+		{where}
+		GROUP BY HOUR(si.posting_time)
+		ORDER BY hour
+	""".format(where=where), filters, as_dict=True)
+
+
+@frappe.whitelist()
+def get_payment_method_breakdown(filters):
+	"""Get payment method breakdown"""
+	filters = frappe.parse_json(filters) if isinstance(filters, str) else filters
+
+	conditions = []
+	if filters.get("from_date"):
+		conditions.append("si.posting_date >= %(from_date)s")
+	if filters.get("to_date"):
+		conditions.append("si.posting_date <= %(to_date)s")
+	if filters.get("pos_profile"):
+		conditions.append("si.pos_profile = %(pos_profile)s")
+	if filters.get("cashier"):
+		conditions.append("si.owner = %(cashier)s")
+
+	where = " AND " + " AND ".join(conditions) if conditions else ""
+
+	return frappe.db.sql("""
+		SELECT
+			sip.mode_of_payment,
+			COUNT(DISTINCT si.name) AS transaction_count,
+			SUM(sip.amount) AS total_amount
+		FROM `tabSales Invoice Payment` sip
+		INNER JOIN `tabSales Invoice` si ON si.name = sip.parent
+		WHERE si.docstatus = 1 AND si.is_pos = 1 AND si.is_return = 0
+		{where}
+		GROUP BY sip.mode_of_payment
+		ORDER BY total_amount DESC
+	""".format(where=where), filters, as_dict=True)
+
+
+@frappe.whitelist()
+def get_daily_trend(filters):
+	"""Get daily sales trend"""
+	filters = frappe.parse_json(filters) if isinstance(filters, str) else filters
+
+	conditions = []
+	if filters.get("from_date"):
+		conditions.append("si.posting_date >= %(from_date)s")
+	if filters.get("to_date"):
+		conditions.append("si.posting_date <= %(to_date)s")
+	if filters.get("pos_profile"):
+		conditions.append("si.pos_profile = %(pos_profile)s")
+	if filters.get("cashier"):
+		conditions.append("si.owner = %(cashier)s")
+
+	where = " AND " + " AND ".join(conditions) if conditions else ""
+
+	return frappe.db.sql("""
+		SELECT
+			si.posting_date AS date,
+			COUNT(*) AS invoice_count,
+			SUM(si.grand_total) AS total_sales
+		FROM `tabSales Invoice` si
+		WHERE si.docstatus = 1 AND si.is_pos = 1 AND si.is_return = 0
+		{where}
+		GROUP BY si.posting_date
+		ORDER BY si.posting_date
+	""".format(where=where), filters, as_dict=True)

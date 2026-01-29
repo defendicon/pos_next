@@ -615,321 +615,6 @@ frappe.query_reports["Sales vs Shifts Report"] = {
 		if (chart_type && chart_type !== "Shift Performance") {
 			this.render_custom_chart(chart_type);
 		}
-
-		// Enhance the summary section
-		this.enhance_summary();
-	},
-
-	enhance_summary: function() {
-		// Wait for summary to render
-		setTimeout(() => {
-			const $summary = $(".report-summary");
-			if (!$summary.length) return;
-
-			// Get the summary data
-			const summaryData = frappe.query_report.report_summary || [];
-			if (!summaryData.length) return;
-
-			// Build enhanced summary HTML
-			const enhancedHtml = this.build_enhanced_summary(summaryData);
-
-			// Replace the default summary
-			$summary.html(enhancedHtml);
-		}, 100);
-	},
-
-	build_enhanced_summary: function(summaryData) {
-		// Parse summary data into categories
-		const getValue = (label) => {
-			const item = summaryData.find(s => s.label === label);
-			return item ? item.value : 0;
-		};
-
-		const formatCurrency = (val) => {
-			return frappe.format(val, { fieldtype: "Currency" });
-		};
-
-		const formatInt = (val) => {
-			return parseInt(val || 0).toLocaleString();
-		};
-
-		const formatPercent = (val) => {
-			return (val || 0).toFixed(1) + "%";
-		};
-
-		// Extract values
-		const shifts = getValue("Shifts");
-		const grossSales = getValue("Gross Sales");
-		const netSales = getValue("Net Sales");
-		const invoices = getValue("Invoices");
-		const itemsSold = getValue("Items Sold");
-		const customers = getValue("Customers");
-		const avgTicket = getValue("Avg Ticket");
-		const cash = getValue("Cash");
-		const nonCash = getValue("Non-Cash");
-		const returns = getValue("Returns");
-		const discounts = getValue("Discounts");
-		const avgEfficiency = getValue("Avg Efficiency");
-		const highPerformers = getValue("High Performers");
-
-		// Calculate derived values
-		const returnRate = grossSales > 0 ? (returns / grossSales * 100) : 0;
-		const discountRate = grossSales > 0 ? (discounts / grossSales * 100) : 0;
-		const cashPercent = (cash + nonCash) > 0 ? (cash / (cash + nonCash) * 100) : 0;
-
-		// Efficiency color
-		let effColor = "#ef4444";
-		if (avgEfficiency >= 80) effColor = "#10b981";
-		else if (avgEfficiency >= 65) effColor = "#3b82f6";
-		else if (avgEfficiency >= 50) effColor = "#f59e0b";
-
-		return `
-			<style>
-				.enhanced-summary {
-					padding: 20px 0;
-					font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-				}
-				.summary-grid {
-					display: grid;
-					grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-					gap: 16px;
-				}
-				.summary-card {
-					background: #fff;
-					border: 1px solid #e5e7eb;
-					border-radius: 12px;
-					padding: 16px 20px;
-					box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-				}
-				.summary-card-header {
-					display: flex;
-					align-items: center;
-					gap: 10px;
-					margin-bottom: 14px;
-					padding-bottom: 12px;
-					border-bottom: 1px solid #f3f4f6;
-				}
-				.summary-card-icon {
-					width: 36px;
-					height: 36px;
-					border-radius: 10px;
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					font-size: 18px;
-				}
-				.summary-card-title {
-					font-size: 13px;
-					font-weight: 600;
-					color: #374151;
-				}
-				.summary-card-subtitle {
-					font-size: 11px;
-					color: #9ca3af;
-				}
-				.summary-stats {
-					display: grid;
-					grid-template-columns: 1fr 1fr;
-					gap: 12px;
-				}
-				.summary-stat {
-					text-align: center;
-					padding: 8px;
-					background: #f9fafb;
-					border-radius: 8px;
-				}
-				.summary-stat.full-width {
-					grid-column: span 2;
-				}
-				.summary-stat-value {
-					font-size: 20px;
-					font-weight: 700;
-					color: #111827;
-					line-height: 1.2;
-				}
-				.summary-stat-value.positive { color: #10b981; }
-				.summary-stat-value.negative { color: #ef4444; }
-				.summary-stat-value.warning { color: #f59e0b; }
-				.summary-stat-value.info { color: #3b82f6; }
-				.summary-stat-label {
-					font-size: 10px;
-					color: #6b7280;
-					text-transform: uppercase;
-					letter-spacing: 0.5px;
-					margin-top: 2px;
-				}
-				.summary-highlight {
-					background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
-					border: 1px solid #bbf7d0;
-				}
-				.summary-highlight.warning {
-					background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-					border: 1px solid #fde68a;
-				}
-				.summary-highlight.danger {
-					background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-					border: 1px solid #fecaca;
-				}
-				.payment-bar {
-					height: 8px;
-					border-radius: 4px;
-					background: #e5e7eb;
-					overflow: hidden;
-					margin-top: 8px;
-				}
-				.payment-bar-fill {
-					height: 100%;
-					border-radius: 4px;
-					transition: width 0.3s ease;
-				}
-				.efficiency-ring {
-					position: relative;
-					width: 80px;
-					height: 80px;
-					margin: 0 auto 8px;
-				}
-				.efficiency-ring svg {
-					transform: rotate(-90deg);
-				}
-				.efficiency-ring-value {
-					position: absolute;
-					top: 50%;
-					left: 50%;
-					transform: translate(-50%, -50%);
-					font-size: 18px;
-					font-weight: 700;
-				}
-			</style>
-
-			<div class="enhanced-summary">
-				<div class="summary-grid">
-
-					<!-- Sales Overview -->
-					<div class="summary-card">
-						<div class="summary-card-header">
-							<div class="summary-card-icon" style="background: #dcfce7; color: #16a34a;">💰</div>
-							<div>
-								<div class="summary-card-title">${__("Sales Overview")}</div>
-								<div class="summary-card-subtitle">${__("Revenue summary")}</div>
-							</div>
-						</div>
-						<div class="summary-stats">
-							<div class="summary-stat">
-								<div class="summary-stat-value">${formatCurrency(grossSales)}</div>
-								<div class="summary-stat-label">${__("Gross Sales")}</div>
-							</div>
-							<div class="summary-stat">
-								<div class="summary-stat-value positive">${formatCurrency(netSales)}</div>
-								<div class="summary-stat-label">${__("Net Sales")}</div>
-							</div>
-							<div class="summary-stat">
-								<div class="summary-stat-value negative">-${formatCurrency(returns)}</div>
-								<div class="summary-stat-label">${__("Returns")} (${returnRate.toFixed(1)}%)</div>
-							</div>
-							<div class="summary-stat">
-								<div class="summary-stat-value warning">-${formatCurrency(discounts)}</div>
-								<div class="summary-stat-label">${__("Discounts")} (${discountRate.toFixed(1)}%)</div>
-							</div>
-						</div>
-					</div>
-
-					<!-- Volume Metrics -->
-					<div class="summary-card">
-						<div class="summary-card-header">
-							<div class="summary-card-icon" style="background: #dbeafe; color: #2563eb;">📊</div>
-							<div>
-								<div class="summary-card-title">${__("Volume Metrics")}</div>
-								<div class="summary-card-subtitle">${__("Transaction counts")}</div>
-							</div>
-						</div>
-						<div class="summary-stats">
-							<div class="summary-stat">
-								<div class="summary-stat-value info">${formatInt(shifts)}</div>
-								<div class="summary-stat-label">${__("Shifts")}</div>
-							</div>
-							<div class="summary-stat">
-								<div class="summary-stat-value">${formatInt(invoices)}</div>
-								<div class="summary-stat-label">${__("Invoices")}</div>
-							</div>
-							<div class="summary-stat">
-								<div class="summary-stat-value">${formatInt(itemsSold)}</div>
-								<div class="summary-stat-label">${__("Items Sold")}</div>
-							</div>
-							<div class="summary-stat">
-								<div class="summary-stat-value">${formatInt(customers)}</div>
-								<div class="summary-stat-label">${__("Customers")}</div>
-							</div>
-						</div>
-					</div>
-
-					<!-- Payment Breakdown -->
-					<div class="summary-card">
-						<div class="summary-card-header">
-							<div class="summary-card-icon" style="background: #fef3c7; color: #d97706;">💳</div>
-							<div>
-								<div class="summary-card-title">${__("Payment Methods")}</div>
-								<div class="summary-card-subtitle">${__("Cash vs Non-Cash")}</div>
-							</div>
-						</div>
-						<div class="summary-stats">
-							<div class="summary-stat">
-								<div class="summary-stat-value" style="color: #059669;">${formatCurrency(cash)}</div>
-								<div class="summary-stat-label">${__("Cash")} (${cashPercent.toFixed(0)}%)</div>
-							</div>
-							<div class="summary-stat">
-								<div class="summary-stat-value" style="color: #7c3aed;">${formatCurrency(nonCash)}</div>
-								<div class="summary-stat-label">${__("Non-Cash")} (${(100 - cashPercent).toFixed(0)}%)</div>
-							</div>
-							<div class="summary-stat full-width">
-								<div class="payment-bar">
-									<div class="payment-bar-fill" style="width: ${cashPercent}%; background: linear-gradient(90deg, #10b981 0%, #34d399 ${cashPercent}%, #8b5cf6 ${cashPercent}%, #a78bfa 100%);"></div>
-								</div>
-								<div style="display: flex; justify-content: space-between; margin-top: 6px;">
-									<span style="font-size: 10px; color: #059669;">● ${__("Cash")}</span>
-									<span style="font-size: 10px; color: #7c3aed;">● ${__("Non-Cash")}</span>
-								</div>
-							</div>
-						</div>
-					</div>
-
-					<!-- Performance -->
-					<div class="summary-card ${avgEfficiency >= 75 ? 'summary-highlight' : avgEfficiency >= 50 ? 'summary-highlight warning' : 'summary-highlight danger'}">
-						<div class="summary-card-header">
-							<div class="summary-card-icon" style="background: ${avgEfficiency >= 75 ? '#dcfce7' : avgEfficiency >= 50 ? '#fef3c7' : '#fee2e2'}; color: ${effColor};">⚡</div>
-							<div>
-								<div class="summary-card-title">${__("Performance")}</div>
-								<div class="summary-card-subtitle">${__("Efficiency & productivity")}</div>
-							</div>
-						</div>
-						<div class="summary-stats">
-							<div class="summary-stat" style="background: transparent;">
-								<div class="efficiency-ring">
-									<svg width="80" height="80" viewBox="0 0 80 80">
-										<circle cx="40" cy="40" r="35" fill="none" stroke="#e5e7eb" stroke-width="6"/>
-										<circle cx="40" cy="40" r="35" fill="none" stroke="${effColor}" stroke-width="6"
-											stroke-dasharray="${2 * Math.PI * 35}"
-											stroke-dashoffset="${2 * Math.PI * 35 * (1 - avgEfficiency / 100)}"
-											stroke-linecap="round"/>
-									</svg>
-									<div class="efficiency-ring-value" style="color: ${effColor};">${avgEfficiency.toFixed(0)}%</div>
-								</div>
-								<div class="summary-stat-label">${__("Avg Efficiency")}</div>
-							</div>
-							<div class="summary-stat" style="background: transparent;">
-								<div class="summary-stat-value positive" style="font-size: 28px;">${formatInt(highPerformers)}</div>
-								<div class="summary-stat-label">${__("High Performers")}</div>
-								<div style="font-size: 10px; color: #6b7280; margin-top: 4px;">${__("Excellent + Good")}</div>
-							</div>
-							<div class="summary-stat full-width">
-								<div class="summary-stat-value" style="font-size: 18px;">${formatCurrency(avgTicket)}</div>
-								<div class="summary-stat-label">${__("Average Ticket Size")}</div>
-							</div>
-						</div>
-					</div>
-
-				</div>
-			</div>
-		`;
 	},
 
 	render_custom_chart: function(chart_type) {
@@ -946,22 +631,27 @@ frappe.query_reports["Sales vs Shifts Report"] = {
 				if (!cashierData[cashier]) {
 					cashierData[cashier] = { sales: 0, invoices: 0, shifts: 0, efficiency: 0 };
 				}
-				cashierData[cashier].sales += d.net_sales || 0;
-				cashierData[cashier].invoices += d.invoices || 0;
+				cashierData[cashier].sales += parseFloat(d.net_sales) || 0;
+				cashierData[cashier].invoices += parseInt(d.invoices) || 0;
 				cashierData[cashier].shifts += 1;
-				cashierData[cashier].efficiency += d.efficiency || 0;
+				cashierData[cashier].efficiency += parseFloat(d.efficiency) || 0;
 			});
 
 			// Sort by sales descending
 			const sorted = Object.entries(cashierData)
 				.map(([name, data]) => ({
 					name: name.split(' ')[0], // First name only
-					sales: data.sales,
-					invoices: data.invoices,
+					sales: data.sales || 0,
+					invoices: data.invoices || 0,
 					avgEfficiency: data.shifts > 0 ? Math.round(data.efficiency / data.shifts) : 0
 				}))
 				.sort((a, b) => b.sales - a.sales)
 				.slice(0, 10);
+
+			// Don't render if no data or less than 2 points (line chart needs 2+ points)
+			if (sorted.length < 2) {
+				return;
+			}
 
 			frappe.query_report.render_chart({
 				data: {
@@ -1101,9 +791,9 @@ frappe.query_reports["Sales vs Shifts Report"] = {
 			return null;
 		}
 
-		// Sort by date and take recent 15
+		// Filter out summary rows and rows without dates, then sort and take recent 15
 		const sorted = [...result]
-			.filter(d => d.shift_date)
+			.filter(d => d.shift_date && d.shift_id && d.shift_id !== "Total")
 			.sort((a, b) => new Date(a.shift_date) - new Date(b.shift_date))
 			.slice(-15);
 
@@ -1111,38 +801,69 @@ frappe.query_reports["Sales vs Shifts Report"] = {
 			return null;
 		}
 
-		// Build informative labels: Date + Cashier initial
+		// Ensure all values are valid numbers
+		const netSalesValues = sorted.map(d => parseFloat(d.net_sales) || 0);
+		const efficiencyValues = sorted.map(d => parseFloat(d.efficiency) || 0);
+
+		// Don't render chart if all values are zero/invalid
+		if (!netSalesValues.some(v => v > 0) && !efficiencyValues.some(v => v > 0)) {
+			return null;
+		}
+
+		// Build labels: Short date format
 		const labels = sorted.map(d => {
 			const date = new Date(d.shift_date);
-			const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-			const cashierInitial = d.cashier ? d.cashier.charAt(0).toUpperCase() : '';
-			return cashierInitial ? `${dateStr} (${cashierInitial})` : dateStr;
+			return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
 		});
 
+		// For single data point, use bar chart only (line chart needs 2+ points)
+		if (sorted.length === 1) {
+			return {
+				data: {
+					labels,
+					datasets: [
+						{
+							name: __("Net Sales"),
+							values: netSalesValues
+						}
+					]
+				},
+				type: "bar",
+				colors: ["#10b981"],
+				height: 280
+			};
+		}
+
+		// For multiple data points, use mixed chart
 		return {
 			data: {
 				labels,
 				datasets: [
 					{
 						name: __("Net Sales"),
-						values: sorted.map(d => d.net_sales || 0),
+						values: netSalesValues,
 						chartType: "bar"
 					},
 					{
 						name: __("Efficiency %"),
-						values: sorted.map(d => d.efficiency || 0),
+						values: efficiencyValues,
 						chartType: "line"
 					}
 				]
 			},
 			type: "axis-mixed",
-			colors: ["#28a745", "#5e64ff"],
-			height: 300,
+			colors: ["#10b981", "#6366f1"],
+			height: 280,
+			axisOptions: {
+				xIsSeries: true,
+				xAxisMode: "tick"
+			},
 			barOptions: {
-				spaceRatio: 0.4
+				spaceRatio: 0.5
 			},
 			lineOptions: {
-				dotSize: 4
+				dotSize: 6,
+				regionFill: 1
 			}
 		};
 	}

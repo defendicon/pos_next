@@ -99,33 +99,38 @@ def get_report_message(data):
 
 	# Calculate metrics
 	total_shifts = len(data)
-	shifts_with_sales = len([d for d in data if d.gross_sales > 0])
+	shifts_with_sales = [d for d in data if d.gross_sales > 0]
+	shifts_with_sales_count = len(shifts_with_sales)
+
+	# Count ratings (only from shifts with sales - others have no rating)
 	excellent_count = len([d for d in data if d.rating == "Excellent"])
 	good_count = len([d for d in data if d.rating == "Good"])
 	average_count = len([d for d in data if d.rating == "Average"])
 	needs_improvement = len([d for d in data if d.rating == "Needs Improvement"])
+	no_sales_count = len([d for d in data if d.gross_sales == 0])
 
 	total_gross = sum(d.gross_sales for d in data)
 	total_net = sum(d.net_sales for d in data)
 	total_returns = sum(d.returns for d in data)
 	total_invoices = sum(d.invoices for d in data)
 
-	avg_efficiency = sum(d.efficiency for d in data) / total_shifts if total_shifts else 0
+	# Average efficiency only from shifts with sales (0% from no-sales shifts would skew it)
+	avg_efficiency = sum(d.efficiency for d in shifts_with_sales) / shifts_with_sales_count if shifts_with_sales_count else 0
 	avg_return_rate = (total_returns / total_gross * 100) if total_gross else 0
 	avg_ticket = total_gross / total_invoices if total_invoices else 0
 
-	# Efficiency gauge color and status
-	if avg_efficiency >= 80:
+	# Efficiency gauge color and status (thresholds match get_rating function)
+	if avg_efficiency >= 90:
 		gauge_color = "#059669"
 		gauge_bg = "#ecfdf5"
 		gauge_border = "#a7f3d0"
 		status_text = "Excellent"
-	elif avg_efficiency >= 65:
+	elif avg_efficiency >= 75:
 		gauge_color = "#2563eb"
 		gauge_bg = "#eff6ff"
 		gauge_border = "#bfdbfe"
 		status_text = "Good"
-	elif avg_efficiency >= 50:
+	elif avg_efficiency >= 60:
 		gauge_color = "#d97706"
 		gauge_bg = "#fffbeb"
 		gauge_border = "#fde68a"
@@ -140,118 +145,394 @@ def get_report_message(data):
 	alerts_html = ""
 	if avg_return_rate > 10:
 		alerts_html += f'''
-			<div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; margin-top: 16px;">
-				<span style="font-size: 16px;">⚠️</span>
-				<span style="font-size: 12px; color: #991b1b;"><strong>High return rate:</strong> {avg_return_rate:.1f}% — Review return patterns and product issues</span>
+			<div class="svs-banner__alert svs-banner__alert--warning">
+				<span class="svs-banner__alert-icon">⚠️</span>
+				<span class="svs-banner__alert-text" style="color: #991b1b;"><strong>High return rate:</strong> {avg_return_rate:.1f}% — Review return patterns and product issues</span>
 			</div>
 		'''
 	if needs_improvement > total_shifts * 0.3:
 		alerts_html += f'''
-			<div style="display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; margin-top: {'8px' if avg_return_rate > 10 else '16px'};">
-				<span style="font-size: 16px;">💡</span>
-				<span style="font-size: 12px; color: #92400e;"><strong>{needs_improvement} shifts</strong> need improvement — Consider additional training</span>
+			<div class="svs-banner__alert svs-banner__alert--info" style="margin-top: {'8px' if avg_return_rate > 10 else ''}">
+				<span class="svs-banner__alert-icon">💡</span>
+				<span class="svs-banner__alert-text" style="color: #92400e;"><strong>{needs_improvement} shifts</strong> need improvement — Consider additional training</span>
 			</div>
 		'''
 
 	return f'''
-		<div style="
-			background: #ffffff;
-			border: 1px solid #e5e7eb;
-			border-radius: 12px;
-			padding: 20px 24px;
-			margin-bottom: 16px;
-			box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-		">
-			<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch;">
+		<style>
+			.svs-banner {{
+				background: #ffffff;
+				border: 1px solid #e5e7eb;
+				border-radius: 12px;
+				padding: 20px 24px;
+				margin-bottom: 16px;
+				box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+			}}
+			.svs-banner__content {{
+				display: flex;
+				flex-wrap: wrap;
+				gap: 24px;
+				align-items: stretch;
+			}}
+			.svs-banner__gauge {{
+				background: {gauge_bg};
+				border: 1px solid {gauge_border};
+				border-radius: 10px;
+				padding: 16px 24px;
+				text-align: center;
+				min-width: 140px;
+			}}
+			.svs-banner__gauge-label {{
+				font-size: 11px;
+				color: #6b7280;
+				text-transform: uppercase;
+				letter-spacing: 1px;
+				margin-bottom: 4px;
+			}}
+			.svs-banner__gauge-value {{
+				font-size: 36px;
+				font-weight: 700;
+				color: {gauge_color};
+				line-height: 1;
+			}}
+			.svs-banner__gauge-value span {{
+				font-size: 18px;
+			}}
+			.svs-banner__gauge-badge {{
+				display: inline-block;
+				margin-top: 8px;
+				padding: 3px 10px;
+				background: {gauge_color};
+				color: white;
+				border-radius: 12px;
+				font-size: 10px;
+				font-weight: 600;
+				text-transform: uppercase;
+			}}
+			.svs-banner__metrics {{
+				flex: 1;
+				min-width: 200px;
+			}}
+			.svs-banner__metrics-grid {{
+				display: grid;
+				grid-template-columns: repeat(4, 1fr);
+				gap: 12px;
+			}}
+			.svs-banner__metric {{
+				background: #f9fafb;
+				border-radius: 8px;
+				padding: 12px 8px;
+				text-align: center;
+			}}
+			.svs-banner__metric--alert {{
+				background: #fef2f2;
+				border: 1px solid #fecaca;
+			}}
+			.svs-banner__metric-label {{
+				font-size: 10px;
+				color: #6b7280;
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+				margin-bottom: 4px;
+			}}
+			.svs-banner__metric-value {{
+				font-size: 20px;
+				font-weight: 600;
+				color: #111827;
+			}}
+			.svs-banner__metric-value--danger {{
+				color: #dc2626;
+			}}
+			.svs-banner__distribution {{
+				min-width: 180px;
+				background: #f9fafb;
+				border-radius: 10px;
+				padding: 14px 16px;
+			}}
+			.svs-banner__distribution-title {{
+				font-size: 10px;
+				color: #6b7280;
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+				margin-bottom: 12px;
+				font-weight: 500;
+			}}
+			.svs-banner__distribution-bars {{
+				display: flex;
+				gap: 8px;
+				align-items: flex-end;
+				height: 44px;
+				margin-bottom: 6px;
+			}}
+			.svs-banner__distribution-bar {{
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+			}}
+			.svs-banner__distribution-labels {{
+				display: flex;
+				gap: 8px;
+				text-align: center;
+			}}
+			.svs-banner__distribution-item {{
+				flex: 1;
+			}}
+			.svs-banner__distribution-count {{
+				font-size: 13px;
+				font-weight: 600;
+			}}
+			.svs-banner__distribution-name {{
+				font-size: 8px;
+				color: #6b7280;
+			}}
+			.svs-banner__alert {{
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				padding: 10px 14px;
+				border-radius: 8px;
+				margin-top: 16px;
+			}}
+			.svs-banner__alert--warning {{
+				background: #fef2f2;
+				border: 1px solid #fecaca;
+			}}
+			.svs-banner__alert--info {{
+				background: #fffbeb;
+				border: 1px solid #fde68a;
+			}}
+			.svs-banner__alert-icon {{
+				font-size: 16px;
+			}}
+			.svs-banner__alert-text {{
+				font-size: 12px;
+			}}
+
+			/* Mobile responsive */
+			@media screen and (max-width: 768px) {{
+				.svs-banner {{
+					padding: 14px 16px;
+				}}
+				.svs-banner__content {{
+					gap: 16px;
+				}}
+				.svs-banner__gauge {{
+					width: 100%;
+					padding: 14px 16px;
+				}}
+				.svs-banner__gauge-value {{
+					font-size: 32px;
+				}}
+				.svs-banner__metrics {{
+					width: 100%;
+					min-width: unset;
+				}}
+				.svs-banner__metrics-grid {{
+					grid-template-columns: repeat(2, 1fr);
+					gap: 8px;
+				}}
+				.svs-banner__metric {{
+					padding: 10px 6px;
+				}}
+				.svs-banner__metric-value {{
+					font-size: 18px;
+				}}
+				.svs-banner__metric-label {{
+					font-size: 9px;
+				}}
+				.svs-banner__distribution {{
+					width: 100%;
+					min-width: unset;
+				}}
+			}}
+
+			@media screen and (max-width: 480px) {{
+				.svs-banner {{
+					padding: 12px;
+					border-radius: 10px;
+				}}
+				.svs-banner__content {{
+					gap: 12px;
+				}}
+				.svs-banner__gauge {{
+					padding: 12px;
+				}}
+				.svs-banner__gauge-value {{
+					font-size: 28px;
+				}}
+				.svs-banner__gauge-value span {{
+					font-size: 14px;
+				}}
+				.svs-banner__gauge-label {{
+					font-size: 10px;
+				}}
+				.svs-banner__metrics-grid {{
+					gap: 6px;
+				}}
+				.svs-banner__metric {{
+					padding: 8px 4px;
+					border-radius: 6px;
+				}}
+				.svs-banner__metric-value {{
+					font-size: 16px;
+				}}
+				.svs-banner__metric-label {{
+					font-size: 8px;
+					letter-spacing: 0.3px;
+				}}
+				.svs-banner__distribution {{
+					padding: 12px;
+				}}
+				.svs-banner__distribution-bars {{
+					height: 36px;
+				}}
+				.svs-banner__distribution-count {{
+					font-size: 12px;
+				}}
+				.svs-banner__alert {{
+					padding: 8px 12px;
+					margin-top: 12px;
+				}}
+				.svs-banner__alert-text {{
+					font-size: 11px;
+				}}
+			}}
+
+			/* Frappe Report Summary - Add spacing below */
+			.report-summary {{
+				margin-bottom: 20px !important;
+			}}
+
+			/* Frappe Report Summary - Mobile Grid Layout */
+			@media screen and (max-width: 768px) {{
+				.report-summary {{
+					display: grid !important;
+					grid-template-columns: repeat(2, 1fr) !important;
+					gap: 8px !important;
+					width: calc(100% - 16px) !important;
+					box-sizing: border-box !important;
+					padding: 0 !important;
+					margin: 0 8px 16px 8px !important;
+					overflow: visible !important;
+					justify-content: center !important;
+				}}
+				.report-summary > div,
+				.report-summary .summary-item {{
+					width: 100% !important;
+					min-width: 0 !important;
+					max-width: 100% !important;
+					box-sizing: border-box !important;
+					padding: 12px 6px !important;
+					margin: 0 !important;
+					text-align: center !important;
+					background: #fff;
+					border: 1px solid #e9ecef;
+					border-radius: 8px;
+					overflow: visible !important;
+				}}
+				.report-summary .summary-label {{
+					font-size: 10px !important;
+					margin-bottom: 4px !important;
+					white-space: normal !important;
+					overflow: visible !important;
+					word-wrap: break-word !important;
+					line-height: 1.3 !important;
+					text-decoration: none !important;
+				}}
+				.report-summary .summary-value {{
+					font-size: 15px !important;
+					font-weight: 600 !important;
+					white-space: nowrap !important;
+					overflow: visible !important;
+					text-decoration: none !important;
+				}}
+			}}
+			@media screen and (max-width: 400px) {{
+				.report-summary {{
+					gap: 6px !important;
+					width: calc(100% - 12px) !important;
+					margin: 0 6px 16px 6px !important;
+				}}
+				.report-summary > div,
+				.report-summary .summary-item {{
+					padding: 10px 4px !important;
+				}}
+				.report-summary .summary-label {{
+					font-size: 9px !important;
+				}}
+				.report-summary .summary-value {{
+					font-size: 13px !important;
+				}}
+			}}
+		</style>
+
+		<div class="svs-banner">
+			<div class="svs-banner__content">
 
 				<!-- Efficiency Score -->
-				<div style="
-					background: {gauge_bg};
-					border: 1px solid {gauge_border};
-					border-radius: 10px;
-					padding: 16px 24px;
-					text-align: center;
-					min-width: 140px;
-				">
-					<div style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">
-						Efficiency
-					</div>
-					<div style="font-size: 36px; font-weight: 700; color: {gauge_color}; line-height: 1;">
-						{avg_efficiency:.0f}<span style="font-size: 18px;">%</span>
-					</div>
-					<div style="
-						display: inline-block;
-						margin-top: 8px;
-						padding: 3px 10px;
-						background: {gauge_color};
-						color: white;
-						border-radius: 12px;
-						font-size: 10px;
-						font-weight: 600;
-						text-transform: uppercase;
-					">
-						{status_text}
-					</div>
+				<div class="svs-banner__gauge">
+					<div class="svs-banner__gauge-label">Efficiency</div>
+					<div class="svs-banner__gauge-value">{avg_efficiency:.0f}<span>%</span></div>
+					<div class="svs-banner__gauge-badge">{status_text}</div>
 				</div>
 
 				<!-- Key Stats -->
-				<div style="flex: 1; min-width: 280px;">
-					<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
-						<div style="background: #f9fafb; border-radius: 8px; padding: 12px; text-align: center;">
-							<div style="font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Shifts</div>
-							<div style="font-size: 22px; font-weight: 600; color: #111827;">{total_shifts}</div>
+				<div class="svs-banner__metrics">
+					<div class="svs-banner__metrics-grid">
+						<div class="svs-banner__metric">
+							<div class="svs-banner__metric-label">Shifts</div>
+							<div class="svs-banner__metric-value">{total_shifts}</div>
 						</div>
-						<div style="background: #f9fafb; border-radius: 8px; padding: 12px; text-align: center;">
-							<div style="font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Invoices</div>
-							<div style="font-size: 22px; font-weight: 600; color: #111827;">{total_invoices:,}</div>
+						<div class="svs-banner__metric">
+							<div class="svs-banner__metric-label">Invoices</div>
+							<div class="svs-banner__metric-value">{total_invoices:,}</div>
 						</div>
-						<div style="background: #f9fafb; border-radius: 8px; padding: 12px; text-align: center;">
-							<div style="font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Avg Ticket</div>
-							<div style="font-size: 22px; font-weight: 600; color: #111827;">{avg_ticket:,.0f}</div>
+						<div class="svs-banner__metric">
+							<div class="svs-banner__metric-label">Avg Ticket</div>
+							<div class="svs-banner__metric-value">{avg_ticket:,.0f}</div>
 						</div>
-						<div style="background: {'#fef2f2' if avg_return_rate > 10 else '#f9fafb'}; border-radius: 8px; padding: 12px; text-align: center; {'border: 1px solid #fecaca;' if avg_return_rate > 10 else ''}">
-							<div style="font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Return Rate</div>
-							<div style="font-size: 22px; font-weight: 600; color: {'#dc2626' if avg_return_rate > 10 else '#111827'};">{avg_return_rate:.1f}%</div>
+						<div class="svs-banner__metric {'svs-banner__metric--alert' if avg_return_rate > 10 else ''}">
+							<div class="svs-banner__metric-label">Return Rate</div>
+							<div class="svs-banner__metric-value {'svs-banner__metric-value--danger' if avg_return_rate > 10 else ''}">{avg_return_rate:.1f}%</div>
 						</div>
 					</div>
 				</div>
 
 				<!-- Rating Distribution -->
-				<div style="min-width: 200px; background: #f9fafb; border-radius: 10px; padding: 14px 16px;">
-					<div style="font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; font-weight: 500;">
-						Performance Distribution
-					</div>
-					<div style="display: flex; gap: 8px; align-items: flex-end; height: 44px; margin-bottom: 6px;">
-						<div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
-							<div style="width: 100%; background: #10b981; border-radius: 4px 4px 0 0; height: {max(6, excellent_count / max(total_shifts, 1) * 44)}px; transition: height 0.3s;"></div>
+				<div class="svs-banner__distribution">
+					<div class="svs-banner__distribution-title">Performance Distribution</div>
+					<div class="svs-banner__distribution-bars">
+						<div class="svs-banner__distribution-bar">
+							<div style="width: 100%; background: #10b981; border-radius: 4px 4px 0 0; height: {max(6, excellent_count / max(excellent_count, good_count, average_count, needs_improvement, 1) * 44)}px;"></div>
 						</div>
-						<div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
-							<div style="width: 100%; background: #3b82f6; border-radius: 4px 4px 0 0; height: {max(6, good_count / max(total_shifts, 1) * 44)}px; transition: height 0.3s;"></div>
+						<div class="svs-banner__distribution-bar">
+							<div style="width: 100%; background: #3b82f6; border-radius: 4px 4px 0 0; height: {max(6, good_count / max(excellent_count, good_count, average_count, needs_improvement, 1) * 44)}px;"></div>
 						</div>
-						<div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
-							<div style="width: 100%; background: #f59e0b; border-radius: 4px 4px 0 0; height: {max(6, average_count / max(total_shifts, 1) * 44)}px; transition: height 0.3s;"></div>
+						<div class="svs-banner__distribution-bar">
+							<div style="width: 100%; background: #f59e0b; border-radius: 4px 4px 0 0; height: {max(6, average_count / max(excellent_count, good_count, average_count, needs_improvement, 1) * 44)}px;"></div>
 						</div>
-						<div style="flex: 1; display: flex; flex-direction: column; align-items: center;">
-							<div style="width: 100%; background: #ef4444; border-radius: 4px 4px 0 0; height: {max(6, needs_improvement / max(total_shifts, 1) * 44)}px; transition: height 0.3s;"></div>
+						<div class="svs-banner__distribution-bar">
+							<div style="width: 100%; background: #ef4444; border-radius: 4px 4px 0 0; height: {max(6, needs_improvement / max(excellent_count, good_count, average_count, needs_improvement, 1) * 44)}px;"></div>
 						</div>
 					</div>
-					<div style="display: flex; gap: 8px; text-align: center;">
-						<div style="flex: 1;">
-							<div style="font-size: 13px; font-weight: 600; color: #10b981;">{excellent_count}</div>
-							<div style="font-size: 8px; color: #6b7280;">Excellent</div>
+					<div class="svs-banner__distribution-labels">
+						<div class="svs-banner__distribution-item">
+							<div class="svs-banner__distribution-count" style="color: #10b981;">{excellent_count}</div>
+							<div class="svs-banner__distribution-name">Excellent</div>
 						</div>
-						<div style="flex: 1;">
-							<div style="font-size: 13px; font-weight: 600; color: #3b82f6;">{good_count}</div>
-							<div style="font-size: 8px; color: #6b7280;">Good</div>
+						<div class="svs-banner__distribution-item">
+							<div class="svs-banner__distribution-count" style="color: #3b82f6;">{good_count}</div>
+							<div class="svs-banner__distribution-name">Good</div>
 						</div>
-						<div style="flex: 1;">
-							<div style="font-size: 13px; font-weight: 600; color: #f59e0b;">{average_count}</div>
-							<div style="font-size: 8px; color: #6b7280;">Average</div>
+						<div class="svs-banner__distribution-item">
+							<div class="svs-banner__distribution-count" style="color: #f59e0b;">{average_count}</div>
+							<div class="svs-banner__distribution-name">Average</div>
 						</div>
-						<div style="flex: 1;">
-							<div style="font-size: 13px; font-weight: 600; color: #ef4444;">{needs_improvement}</div>
-							<div style="font-size: 8px; color: #6b7280;">Low</div>
+						<div class="svs-banner__distribution-item">
+							<div class="svs-banner__distribution-count" style="color: #ef4444;">{needs_improvement}</div>
+							<div class="svs-banner__distribution-name">Low</div>
 						</div>
 					</div>
 				</div>
@@ -698,6 +979,11 @@ def calculate_statistics(shifts):
 
 def calculate_efficiency(shift, stats):
 	"""Calculate efficiency score (0-100) using relative comparisons"""
+
+	# No sales = no efficiency to measure
+	if shift.gross_sales == 0 or shift.invoices == 0:
+		return 0
+
 	score = 70  # Base score
 
 	# Factor 1: Return rate penalty/bonus (-20 to +5)
@@ -770,7 +1056,10 @@ def get_summary(data):
 	total_cash = sum(d.cash for d in data)
 	total_non_cash = sum(d.non_cash for d in data)
 
-	avg_efficiency = sum(d.efficiency for d in data) / total_shifts if total_shifts else 0
+	# Average efficiency only from shifts with sales (0% from no-sales shifts would skew it)
+	shifts_with_sales = [d for d in data if d.gross_sales > 0]
+	shifts_with_sales_count = len(shifts_with_sales)
+	avg_efficiency = sum(d.efficiency for d in shifts_with_sales) / shifts_with_sales_count if shifts_with_sales_count else 0
 	avg_ticket = total_gross / total_invoices if total_invoices else 0
 
 	excellent = len([d for d in data if d.rating == "Excellent"])
@@ -789,7 +1078,7 @@ def get_summary(data):
 		{"value": total_returns, "label": _("Returns"), "datatype": "Currency", "indicator": "Red"},
 		{"value": total_discounts, "label": _("Discounts"), "datatype": "Currency", "indicator": "Orange"},
 		{"value": avg_efficiency, "label": _("Avg Efficiency"), "datatype": "Percent",
-		 "indicator": "Green" if avg_efficiency >= 75 else "Orange" if avg_efficiency >= 50 else "Red"},
+		 "indicator": "Green" if avg_efficiency >= 90 else "Blue" if avg_efficiency >= 75 else "Orange" if avg_efficiency >= 60 else "Red"},
 		{"value": excellent + good, "label": _("High Performers"), "datatype": "Int", "indicator": "Green"},
 	]
 
@@ -809,45 +1098,69 @@ def get_chart(data):
 	if not recent:
 		return None
 
-	# Build labels: Date + Cashier first name
+	# Build labels: Short date format
 	labels = []
 	for d in recent:
-		date_str = d.shift_date.strftime("%d/%m") if hasattr(d.shift_date, 'strftime') else ""
-		cashier_short = (d.cashier or "").split()[0][:8] if d.cashier else ""
-		if date_str and cashier_short:
-			labels.append(f"{date_str} {cashier_short}")
-		elif date_str:
-			labels.append(date_str)
+		if hasattr(d.shift_date, 'strftime'):
+			labels.append(d.shift_date.strftime("%d %b"))
 		else:
 			labels.append(d.shift_id[:8] if d.shift_id else "-")
 
+	# Ensure all values are valid numbers (not None/undefined)
+	net_sales_values = [flt(d.net_sales or 0) for d in recent]
+	efficiency_values = [flt(d.efficiency or 0) for d in recent]
+
+	# Don't render chart if all values are zero
+	if not any(net_sales_values) and not any(efficiency_values):
+		return None
+
+	# For single data point, use bar chart only (line chart needs 2+ points)
+	if len(recent) == 1:
+		return {
+			"data": {
+				"labels": labels,
+				"datasets": [
+					{
+						"name": _("Net Sales"),
+						"values": net_sales_values
+					}
+				]
+			},
+			"type": "bar",
+			"colors": ["#10b981"],
+			"height": 280
+		}
+
+	# For multiple data points, use mixed chart
 	return {
 		"data": {
 			"labels": labels,
 			"datasets": [
 				{
 					"name": _("Net Sales"),
-					"values": [flt(d.net_sales) for d in recent],
+					"values": net_sales_values,
 					"chartType": "bar"
 				},
 				{
-					"name": _("Invoices"),
-					"values": [d.invoices for d in recent],
+					"name": _("Efficiency %"),
+					"values": efficiency_values,
 					"chartType": "line"
 				}
 			]
 		},
 		"type": "axis-mixed",
-		"colors": ["#28a745", "#5e64ff"],
-		"height": 300,
+		"colors": ["#10b981", "#6366f1"],
+		"height": 280,
 		"axisOptions": {
-			"xIsSeries": True
+			"xIsSeries": True,
+			"xAxisMode": "tick"
 		},
 		"barOptions": {
-			"spaceRatio": 0.4
+			"spaceRatio": 0.5
 		},
 		"lineOptions": {
-			"dotSize": 4
+			"dotSize": 6,
+			"regionFill": 1
 		}
 	}
 

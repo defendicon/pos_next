@@ -256,6 +256,7 @@ const localItem = ref(null)
 const localQuantity = ref(1)
 const localUom = ref("")
 const localRate = ref(0)
+const originalPriceListRate = ref(0) // Track original price for audit
 const localWarehouse = ref("")
 const discountType = ref("percentage")
 const discountValue = ref(0)
@@ -318,6 +319,8 @@ watch(
 			localQuantity.value = newItem.quantity || 1
 			localUom.value = newItem.uom || newItem.stock_uom || __("Nos")
 			localRate.value = newItem.rate || 0
+			// Store original price_list_rate for tracking manual edits
+			originalPriceListRate.value = newItem.price_list_rate || newItem.rate || 0
 			localWarehouse.value =
 				newItem.warehouse || props.warehouses[0]?.name || ""
 
@@ -523,22 +526,53 @@ function formatCurrency(amount) {
 }
 
 function updateItem() {
-	// Preserve original price_list_rate for audit trail
-	// Only update rate, not price_list_rate
+	// Check if rate was manually edited
+	const isRateManuallyEdited = localRate.value !== originalPriceListRate.value
+
+	// ========================================================================
+	// RATE EDIT VALIDATION
+	// ========================================================================
+	if (settingsStore.allowUserToEditRate && isRateManuallyEdited) {
+		// Validate rate is positive
+		if (localRate.value <= 0) {
+			showError(__('Rate must be greater than zero'))
+			return
+		}
+
+		// Validate against max discount if rate was reduced
+		const maxDiscount = settingsStore.maxDiscountAllowed
+		if (maxDiscount > 0 && localRate.value < originalPriceListRate.value) {
+			const discountPercent = ((originalPriceListRate.value - localRate.value) / originalPriceListRate.value) * 100
+			const roundedDiscount = Math.round(discountPercent * 100) / 100
+
+			if (roundedDiscount > maxDiscount) {
+				showError(
+					__('Rate reduction of {0}% exceeds maximum allowed discount of {1}%', [
+						roundedDiscount.toFixed(2),
+						maxDiscount
+					])
+				)
+				return
+			}
+		}
+	}
+
 	const updatedItem = {
 		...localItem.value,
 		quantity: localQuantity.value,
 		uom: localUom.value,
 		rate: localRate.value,
-		// Keep original price_list_rate - do NOT overwrite with edited rate
-		// This preserves the original price for discount/margin audit
+		// IMPORTANT: Preserve original price_list_rate for auditability
+		// price_list_rate remains unchanged - it's the original catalog price
+		price_list_rate: originalPriceListRate.value,
 		warehouse: localWarehouse.value,
 		discount_percentage:
 			discountType.value === "percentage" ? discountValue.value : 0,
 		discount_amount:
 			discountType.value === "amount" ? discountValue.value : 0,
-		// Flag to track if rate was manually edited
-		is_rate_manually_edited: localRate.value !== localItem.value.price_list_rate,
+		// Track manual rate edits for audit logging
+		is_rate_manually_edited: isRateManuallyEdited ? 1 : 0,
+		original_rate: isRateManuallyEdited ? originalPriceListRate.value : null,
 	}
 
 	// Update serial numbers if item has serials

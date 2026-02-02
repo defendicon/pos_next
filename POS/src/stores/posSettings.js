@@ -99,7 +99,7 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 		Boolean(settings.value.allow_user_to_edit_item_discount),
 	)
 	const allowUserToEditRate = computed(() =>
-		Boolean(settings.value.allow_user_to_edit_rate),
+		Boolean(settings.value.allow_user_to_edit_rate)
 	)
 	const disableRoundedTotal = computed(() =>
 		Boolean(settings.value.disable_rounded_total),
@@ -224,11 +224,8 @@ export const usePOSSettingsStore = defineStore("posSettings", () => {
 	const settingsResource = createResource({
 		url: "pos_next.pos_next.doctype.pos_settings.pos_settings.get_pos_settings",
 		onSuccess(data) {
-			console.log('[POSSettings Store] Loaded settings:', data)
 			if (data) {
 				Object.assign(settings.value, data)
-				console.log('[POSSettings Store] Updated settings.value:', settings.value)
-				console.log('[POSSettings Store] allowPartialPayment computed:', Boolean(settings.value.allow_partial_payment))
 				isLoaded.value = true
 			}
 			isLoading.value = false

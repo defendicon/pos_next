@@ -1100,8 +1100,12 @@ export const usePOSCartStore = defineStore("posCart", () => {
 			if (updates.warehouse !== undefined) cartItem.warehouse = updates.warehouse
 			if (updates.discount_percentage !== undefined) cartItem.discount_percentage = updates.discount_percentage
 			if (updates.discount_amount !== undefined) cartItem.discount_amount = updates.discount_amount
+			if (updates.rate !== undefined) cartItem.rate = updates.rate
 			if (updates.price_list_rate !== undefined) cartItem.price_list_rate = updates.price_list_rate
 			if (updates.serial_no !== undefined) cartItem.serial_no = updates.serial_no
+			// Track manual rate edits for audit purposes
+			if (updates.is_rate_manually_edited !== undefined) cartItem.is_rate_manually_edited = updates.is_rate_manually_edited
+			if (updates.original_rate !== undefined) cartItem.original_rate = updates.original_rate
 
 			recalculateItem(cartItem)
 			rebuildIncrementalCache()

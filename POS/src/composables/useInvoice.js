@@ -107,6 +107,74 @@ export function useInvoice() {
 	})
 
 	// ========================================================================
+	// HELPER FUNCTIONS - Reusable item mapping for invoice creation
+	// ========================================================================
+
+	/**
+	 * Maps a cart item to the invoice item format expected by the backend.
+	 * Handles rate calculation based on tax mode and preserves manual rate edit tracking.
+	 *
+	 * @param {Object} item - Cart item with quantity, rate, discounts, etc.
+	 * @returns {Object} - Invoice item formatted for API submission
+	 */
+	function mapCartItemToInvoiceItem(item) {
+		// Calculate rate based on tax mode
+		// Tax-inclusive: Send gross amount (price after discount, before tax extraction)
+		// Tax-exclusive: Send net amount (after discount, before tax addition)
+		let rate
+		if (taxInclusive.value) {
+			const priceListRate = item.price_list_rate || item.rate
+			const discountPerUnit = (item.discount_amount || 0) / (item.quantity || 1)
+			rate = priceListRate - discountPerUnit
+		} else {
+			rate = item.quantity > 0 ? item.amount / item.quantity : item.rate
+		}
+
+		return {
+			item_code: item.item_code,
+			item_name: item.item_name,
+			qty: item.quantity,
+			rate,
+			price_list_rate: item.price_list_rate || item.rate,
+			uom: item.uom,
+			warehouse: item.warehouse,
+			batch_no: item.batch_no,
+			serial_no: item.serial_no,
+			conversion_factor: item.conversion_factor || 1,
+			discount_percentage: item.discount_percentage || 0,
+			discount_amount: item.discount_amount || 0,
+			// Manual rate edit tracking for audit logging
+			is_rate_manually_edited: item.is_rate_manually_edited || 0,
+			original_rate: item.original_rate || null,
+		}
+	}
+
+	/**
+	 * Maps a payment to the invoice payment format expected by the backend.
+	 * @param {Object} payment - Payment with mode_of_payment, amount, type
+	 * @returns {Object} - Payment formatted for API submission
+	 */
+	function mapPaymentToInvoicePayment(payment) {
+		return {
+			mode_of_payment: payment.mode_of_payment,
+			amount: payment.amount,
+			type: payment.type,
+		}
+	}
+
+	/**
+	 * Maps a sales team member to the invoice format expected by the backend.
+	 * @param {Object} member - Sales team member with sales_person, allocated_percentage
+	 * @returns {Object} - Sales team member formatted for API submission
+	 */
+	function mapSalesTeamMember(member) {
+		return {
+			sales_person: member.sales_person,
+			allocated_percentage: member.allocated_percentage || 0,
+		}
+	}
+
+	// ========================================================================
 	// COMPUTED TOTALS - IMPORTANT: Subtotal uses price_list_rate (original price)
 	// ========================================================================
 	// Formula depends on tax_inclusive mode:
@@ -249,9 +317,10 @@ export function useInvoice() {
 
 		if (itemToRemove) {
 			// Update cache incrementally (subtract removed item values)
-			// Use price_list_rate for subtotal (before discount)
-			const priceListRate = itemToRemove.price_list_rate || itemToRemove.rate
-			_cachedSubtotal.value -= itemToRemove.quantity * priceListRate
+			// Use effective rate (manually edited rate or price_list_rate)
+			const isManuallyEdited = itemToRemove.is_rate_manually_edited === 1
+			const effectiveRate = isManuallyEdited ? itemToRemove.rate : (itemToRemove.price_list_rate || itemToRemove.rate)
+			_cachedSubtotal.value -= itemToRemove.quantity * effectiveRate
 			_cachedTotalTax.value -= itemToRemove.tax_amount || 0
 			_cachedTotalDiscount.value -= itemToRemove.discount_amount || 0
 
@@ -292,9 +361,10 @@ export function useInvoice() {
 
 		if (item) {
 			// Store old values before update for incremental cache adjustment
-			// Use price_list_rate for subtotal calculations (before discount)
-			const oldPriceListRate = item.price_list_rate || item.rate
-			const oldAmount = item.quantity * oldPriceListRate
+			// Use effective rate (manually edited rate or price_list_rate)
+			const isManuallyEdited = item.is_rate_manually_edited === 1
+			const effectiveRate = isManuallyEdited ? item.rate : (item.price_list_rate || item.rate)
+			const oldAmount = item.quantity * effectiveRate
 			const oldTax = item.tax_amount || 0
 			const oldDiscount = item.discount_amount || 0
 			const oldQuantity = item.quantity
@@ -323,36 +393,45 @@ export function useInvoice() {
 			recalculateItem(item)
 
 			// Update cache incrementally (new values - old values)
-			// Use price_list_rate for subtotal (before discount)
-			const priceListRate = item.price_list_rate || item.rate
-			_cachedSubtotal.value += item.quantity * priceListRate - oldAmount
+			// Use effective rate (manually edited rate or price_list_rate)
+			_cachedSubtotal.value += item.quantity * effectiveRate - oldAmount
 			_cachedTotalTax.value += (item.tax_amount || 0) - oldTax
 			_cachedTotalDiscount.value += (item.discount_amount || 0) - oldDiscount
 		}
 	}
 
-	function updateItemRate(itemCode, rate) {
+	function updateItemRate(itemCode, rate, isManualEdit = false) {
 		const item = invoiceItems.value.find((i) => i.item_code === itemCode)
 		if (item) {
 			// Store old values before update for incremental cache adjustment
-			// Use price_list_rate for subtotal calculations (before discount)
-			const oldPriceListRate = item.price_list_rate || item.rate
-			const oldAmount = item.quantity * oldPriceListRate
+			// Use effective rate (manually edited rate or price_list_rate)
+			const wasManuallyEdited = item.is_rate_manually_edited === 1
+			const oldEffectiveRate = wasManuallyEdited ? item.rate : (item.price_list_rate || item.rate)
+			const oldAmount = item.quantity * oldEffectiveRate
 			const oldTax = item.tax_amount || 0
 			const oldDiscount = item.discount_amount || 0
 
-			// Only update rate, preserve price_list_rate for audit trail
 			const newRate = Number.parseFloat(rate) || 0
+
+			// Update rate but PRESERVE price_list_rate (original catalog price)
+			// This maintains auditability - we can always see the original price
 			item.rate = newRate
-			// Do NOT overwrite price_list_rate - keep original for discount/margin tracking
-			item.is_rate_manually_edited = newRate !== item.price_list_rate
+			// price_list_rate is NOT updated - it remains the original catalog price
+
+			// Track manual rate edits for audit purposes
+			const originalPriceListRate = item.price_list_rate || oldEffectiveRate
+			if (isManualEdit && newRate !== originalPriceListRate) {
+				item.is_rate_manually_edited = 1
+				item.original_rate = originalPriceListRate
+			}
 
 			recalculateItem(item)
 
 			// Update cache incrementally (new values - old values)
-			// Use price_list_rate for subtotal (before discount)
-			const priceListRate = item.price_list_rate || item.rate
-			_cachedSubtotal.value += item.quantity * priceListRate - oldAmount
+			// Use the new rate for manually edited items
+			const isNowManuallyEdited = item.is_rate_manually_edited === 1
+			const newEffectiveRate = isNowManuallyEdited ? item.rate : (item.price_list_rate || item.rate)
+			_cachedSubtotal.value += item.quantity * newEffectiveRate - oldAmount
 			_cachedTotalTax.value += (item.tax_amount || 0) - oldTax
 			_cachedTotalDiscount.value += (item.discount_amount || 0) - oldDiscount
 		}
@@ -367,9 +446,10 @@ export function useInvoice() {
 			if (validDiscount > 100) validDiscount = 100
 
 			// Store old values before update for incremental cache adjustment
-			// Use price_list_rate for subtotal calculations (before discount)
-			const oldPriceListRate = item.price_list_rate || item.rate
-			const oldAmount = item.quantity * oldPriceListRate
+			// Use effective rate (manually edited rate or price_list_rate)
+			const isManuallyEdited = item.is_rate_manually_edited === 1
+			const effectiveRate = isManuallyEdited ? item.rate : (item.price_list_rate || item.rate)
+			const oldAmount = item.quantity * effectiveRate
 			const oldTax = item.tax_amount || 0
 			const oldDiscount = item.discount_amount || 0
 
@@ -378,9 +458,8 @@ export function useInvoice() {
 			recalculateItem(item)
 
 			// Update cache incrementally (new values - old values)
-			// Use price_list_rate for subtotal (before discount)
-			const priceListRate = item.price_list_rate || item.rate
-			_cachedSubtotal.value += item.quantity * priceListRate - oldAmount
+			// Use effective rate (manually edited rate or price_list_rate)
+			_cachedSubtotal.value += item.quantity * effectiveRate - oldAmount
 			_cachedTotalTax.value += (item.tax_amount || 0) - oldTax
 			_cachedTotalDiscount.value += (item.discount_amount || 0) - oldDiscount
 		}
@@ -511,9 +590,10 @@ export function useInvoice() {
 		_cachedTotalDiscount.value = 0
 
 		for (const item of invoiceItems.value) {
-			// Use price_list_rate for subtotal (before discount)
-			const priceListRate = item.price_list_rate || item.rate
-			_cachedSubtotal.value += item.quantity * priceListRate
+			// Use manually edited rate if set, otherwise use price_list_rate
+			const isManuallyEdited = item.is_rate_manually_edited === 1
+			const effectiveRate = isManuallyEdited ? item.rate : (item.price_list_rate || item.rate)
+			_cachedSubtotal.value += item.quantity * effectiveRate
 			_cachedTotalTax.value += item.tax_amount || 0
 			_cachedTotalDiscount.value += item.discount_amount || 0
 		}
@@ -550,9 +630,11 @@ export function useInvoice() {
 	 * @param {Object} item - Invoice item object with quantity, rates, and discount fields
 	 */
 	function recalculateItem(item) {
-		// Determine the base unit price (original list price)
-		const priceListRate = item.price_list_rate || item.rate
-		const baseAmount = item.quantity * priceListRate
+		// Determine the base unit price
+		// If rate was manually edited, use the edited rate; otherwise use price_list_rate
+		const isManuallyEdited = item.is_rate_manually_edited === 1
+		const effectiveRate = isManuallyEdited ? item.rate : (item.price_list_rate || item.rate)
+		const baseAmount = item.quantity * effectiveRate
 
 		// Calculate discount from either percentage or fixed amount
 		let discountAmount = 0
@@ -584,7 +666,10 @@ export function useInvoice() {
 
 		// Update item fields
 		item.tax_amount = taxAmount
-		item.rate = priceListRate  // Preserve original price for display
+		// Only overwrite rate if NOT manually edited (preserve manual edits)
+		if (!isManuallyEdited) {
+			item.rate = effectiveRate
+		}
 		item.amount = netAmount    // Net amount for backend calculations
 	}
 
@@ -663,33 +748,8 @@ export function useInvoice() {
 			pos_profile: posProfile.value,
 			posa_pos_opening_shift: posOpeningShift.value,
 			customer: customer.value?.name || customer.value,
-			items: rawItems.map((item) => ({
-				item_code: item.item_code,
-				item_name: item.item_name,
-				qty: item.quantity,
-				// IMPORTANT: Rate calculation depends on tax mode and discounts
-				// Tax-inclusive mode: Send gross amount (price after discount, before tax extraction)
-				//   - With discount: price_list_rate - discount_amount
-				//   - Without discount: price_list_rate
-				//   ERPNext will extract net amount based on included_in_print_rate flag
-				// Tax-exclusive mode: Send net amount (after discount, before tax addition)
-				rate: taxInclusive.value
-					? ((item.price_list_rate || item.rate) - (item.discount_amount || 0) / (item.quantity || 1))
-					: (item.quantity > 0 ? item.amount / item.quantity : item.rate),
-				price_list_rate: item.price_list_rate || item.rate,
-				uom: item.uom,
-				warehouse: item.warehouse,
-				batch_no: item.batch_no,
-				serial_no: item.serial_no,
-				conversion_factor: item.conversion_factor || 1,
-				discount_percentage: item.discount_percentage || 0,
-				discount_amount: item.discount_amount || 0,
-			})),
-			payments: rawPayments.map((p) => ({
-				mode_of_payment: p.mode_of_payment,
-				amount: p.amount,
-				type: p.type,
-			})),
+			items: rawItems.map(mapCartItemToInvoiceItem),
+			payments: rawPayments.map(mapPaymentToInvoicePayment),
 			discount_amount: additionalDiscount.value || 0,
 			coupon_code: couponCode.value,
 			is_pos: 1,
@@ -724,37 +784,12 @@ export function useInvoice() {
 				pos_profile: posProfile.value,
 				posa_pos_opening_shift: posOpeningShift.value,
 				customer: customer.value?.name || customer.value,
-				items: rawItems.map((item) => ({
-					item_code: item.item_code,
-					item_name: item.item_name,
-					qty: item.quantity,
-					// IMPORTANT: Rate calculation depends on tax mode and discounts
-					// Tax-inclusive mode: Send gross amount (price after discount, before tax extraction)
-					//   - With discount: price_list_rate - discount_amount
-					//   - Without discount: price_list_rate
-					//   ERPNext will extract net amount based on included_in_print_rate flag
-					// Tax-exclusive mode: Send net amount (after discount, before tax addition)
-					rate: taxInclusive.value
-						? ((item.price_list_rate || item.rate) - (item.discount_amount || 0) / (item.quantity || 1))
-						: (item.quantity > 0 ? item.amount / item.quantity : item.rate),
-					price_list_rate: item.price_list_rate || item.rate,
-					uom: item.uom,
-					warehouse: item.warehouse,
-					batch_no: item.batch_no,
-					serial_no: item.serial_no,
-					conversion_factor: item.conversion_factor || 1,
-					discount_percentage: item.discount_percentage || 0,
-					discount_amount: item.discount_amount || 0,
-				})),
-				payments: rawPayments.map((p) => ({
-					mode_of_payment: p.mode_of_payment,
-					amount: p.amount,
-					type: p.type,
-				})),
+				items: rawItems.map(mapCartItemToInvoiceItem),
+				payments: rawPayments.map(mapPaymentToInvoicePayment),
 				discount_amount: additionalDiscount.value || 0,
 				coupon_code: couponCode.value,
 				is_pos: 1,
-				update_stock: 1, // Critical: Ensures stock is updated
+				update_stock: 1,
 			}
 
 			if (targetDoctype === "Sales Order" && deliveryDate) {
@@ -763,10 +798,7 @@ export function useInvoice() {
 
 			// Add sales_team if provided
 			if (rawSalesTeam && rawSalesTeam.length > 0) {
-				invoiceData.sales_team = rawSalesTeam.map((member) => ({
-					sales_person: member.sales_person,
-					allocated_percentage: member.allocated_percentage || 0,
-				}))
+				invoiceData.sales_team = rawSalesTeam.map(mapSalesTeamMember)
 			}
 
 			const draftInvoice = await updateInvoiceResource.submit({

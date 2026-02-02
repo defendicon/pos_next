@@ -10,6 +10,28 @@ from frappe.utils import flt, cint, nowdate, nowtime, get_datetime, cstr
 from erpnext.stock.doctype.batch.batch import get_batch_qty, get_batch_no
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import get_bank_cash_account
 
+
+# ==========================================
+# Constants for field names (avoid typos and enable refactoring)
+# ==========================================
+FIELD_IS_RATE_MANUALLY_EDITED = "is_rate_manually_edited"
+FIELD_ORIGINAL_RATE = "original_rate"
+FIELD_PRICE_LIST_RATE = "price_list_rate"
+FIELD_RATE = "rate"
+FIELD_ITEM_CODE = "item_code"
+FIELD_DISCOUNT_PERCENTAGE = "discount_percentage"
+FIELD_ALLOW_USER_TO_EDIT_RATE = "allow_user_to_edit_rate"
+FIELD_MAX_DISCOUNT_ALLOWED = "max_discount_allowed"
+FIELD_DISABLE_ROUNDED_TOTAL = "disable_rounded_total"
+FIELD_ALLOW_NEGATIVE_STOCK = "allow_negative_stock"
+
+# Doctypes
+DOCTYPE_SALES_INVOICE = "Sales Invoice"
+DOCTYPE_POS_SETTINGS = "POS Settings"
+DOCTYPE_POS_PROFILE = "POS Profile"
+DOCTYPE_COMMENT = "Comment"
+
+
 try:
     from erpnext.accounts.doctype.pricing_rule.pricing_rule import (
         apply_pricing_rule as erpnext_apply_pricing_rule,
@@ -25,6 +47,176 @@ except Exception:  # pragma: no cover - ERPNext not installed in some environmen
 # ==========================================
 # Helper Functions
 # ==========================================
+
+
+def calculate_price_list_rate(item_rate, discount_pct, current_price_list_rate):
+    """
+    Calculate price_list_rate from discounted rate and discount percentage.
+
+    Formula: rate = price_list_rate * (1 - discount_percentage/100)
+    Reverse: price_list_rate = rate / (1 - discount_percentage/100)
+
+    Args:
+        item_rate: The current item rate (after discount)
+        discount_pct: The discount percentage (0-100)
+        current_price_list_rate: The existing price_list_rate if any
+
+    Returns:
+        float: The calculated price_list_rate
+    """
+    # Early exit: no discount applied
+    if discount_pct <= 0 or discount_pct >= 100:
+        return current_price_list_rate if current_price_list_rate else item_rate
+
+    # Reverse-calculate price_list_rate from discounted rate
+    if item_rate > 0:
+        discount_multiplier = 1 - discount_pct / 100
+        return item_rate / discount_multiplier
+
+    return current_price_list_rate if current_price_list_rate else item_rate
+
+
+def validate_manual_rate_edit(item, pos_profile=None, pos_settings_cache=None):
+    """
+    Validate manually edited item rates against POS Settings business rules.
+
+    This function enforces:
+    1. Rate must be positive
+    2. Rate editing must be enabled in POS Settings
+    3. Rate reduction must not exceed max_discount_allowed (if configured)
+
+    Args:
+        item: The item dict/object with rate information. Must contain:
+            - is_rate_manually_edited: Flag indicating manual edit (1 or 0)
+            - item_code: The item code for error messages
+            - rate: The edited rate
+            - original_rate or price_list_rate: The original catalog price
+        pos_profile: POS Profile name for settings lookup. Required for manual edits.
+        pos_settings_cache: Optional pre-fetched POS Settings dict to avoid repeated DB queries.
+            Should contain: allow_user_to_edit_rate, max_discount_allowed
+
+    Returns:
+        dict with 'valid' boolean and 'message' string if invalid
+    """
+    is_manual_edit = cint(item.get(FIELD_IS_RATE_MANUALLY_EDITED) or 0)
+
+    # Skip validation if not a manual edit
+    if not is_manual_edit:
+        return {"valid": True}
+
+    item_code = item.get(FIELD_ITEM_CODE)
+    item_rate = flt(item.get(FIELD_RATE) or 0)
+    original_rate = flt(item.get(FIELD_ORIGINAL_RATE) or item.get(FIELD_PRICE_LIST_RATE) or 0)
+
+    # Validate rate is positive
+    if item_rate <= 0:
+        return {
+            "valid": False,
+            "message": _("Rate for item {0} must be greater than zero").format(item_code)
+        }
+
+    # POS Profile is required for manual rate edit validation
+    if not pos_profile:
+        return {
+            "valid": False,
+            "message": _("POS Profile is required to validate rate edit for item {0}").format(item_code)
+        }
+
+    # Use cached POS Settings if provided, otherwise fetch from DB
+    pos_settings = pos_settings_cache
+    if pos_settings is None:
+        pos_settings = frappe.db.get_value(
+            DOCTYPE_POS_SETTINGS,
+            {"pos_profile": pos_profile},
+            [FIELD_ALLOW_USER_TO_EDIT_RATE, FIELD_MAX_DISCOUNT_ALLOWED],
+            as_dict=True
+        )
+
+    # Check if POS Settings exists
+    if not pos_settings:
+        return {
+            "valid": False,
+            "message": _("POS Settings not found for profile {0}. Cannot validate rate edit.").format(pos_profile)
+        }
+
+    # Check if rate editing is allowed
+    if not cint(pos_settings.get(FIELD_ALLOW_USER_TO_EDIT_RATE)):
+        return {
+            "valid": False,
+            "message": _("Rate editing is not allowed for this POS Profile")
+        }
+
+    # Validate against max discount if configured and rate is reduced
+    max_discount = flt(pos_settings.get(FIELD_MAX_DISCOUNT_ALLOWED) or 0)
+    if max_discount > 0 and original_rate > 0 and item_rate < original_rate:
+        # Calculate effective discount percentage
+        discount_pct = round(((original_rate - item_rate) / original_rate) * 100, 2)
+        if discount_pct > max_discount:
+            return {
+                "valid": False,
+                "message": _("Rate reduction for item {0} is {1}% which exceeds the maximum allowed discount of {2}%").format(
+                    item_code, discount_pct, max_discount
+                )
+            }
+
+    return {"valid": True}
+
+
+def log_manual_rate_edit(item, invoice_name, user=None):
+    """
+    Create an audit log entry for manual rate edits.
+
+    This function creates a Comment on the Sales Invoice documenting the rate change.
+    It should only be called ONCE per item, after the invoice is successfully submitted.
+
+    Args:
+        item: The item dict/object with rate information. Must contain:
+            - is_rate_manually_edited: Flag indicating manual edit (1 or 0)
+            - item_code: The item code
+            - rate: The new/edited rate
+            - original_rate: The original price before edit (or price_list_rate as fallback)
+        invoice_name: The Sales Invoice document name
+        user: Optional user who made the edit (defaults to session user)
+
+    Returns:
+        None
+    """
+    # Only log if rate was manually edited
+    if not cint(item.get(FIELD_IS_RATE_MANUALLY_EDITED)):
+        return
+
+    user = user or frappe.session.user
+    item_code = item.get(FIELD_ITEM_CODE)
+    original_rate = flt(item.get(FIELD_ORIGINAL_RATE) or item.get(FIELD_PRICE_LIST_RATE) or 0)
+    new_rate = flt(item.get(FIELD_RATE) or 0)
+
+    # Skip logging if rates are the same (no actual change)
+    if original_rate == new_rate:
+        return
+
+    # Calculate discount/markup percentage for logging
+    change_pct = 0
+    change_type = "reduction"
+    if original_rate > 0:
+        change_pct = round(abs((original_rate - new_rate) / original_rate) * 100, 2)
+        if new_rate > original_rate:
+            change_type = "increase"
+
+    # Create audit comment on the invoice
+    frappe.get_doc({
+        "doctype": DOCTYPE_COMMENT,
+        "comment_type": "Comment",
+        "reference_doctype": DOCTYPE_SALES_INVOICE,
+        "reference_name": invoice_name,
+        "content": _("Manual rate edit by {user}: Item {item_code} rate changed from {original} to {new} ({change_pct}% {change_type})").format(
+            user=user,
+            item_code=item_code,
+            original=frappe.format_value(original_rate, {"fieldtype": "Currency"}),
+            new=frappe.format_value(new_rate, {"fieldtype": "Currency"}),
+            change_pct=change_pct,
+            change_type=change_type
+        )
+    }).insert(ignore_permissions=True)
 
 
 def get_payment_account(mode_of_payment, company):
@@ -312,6 +504,24 @@ def update_invoice(data):
         pos_profile = data.get("pos_profile")
         doctype = data.get("doctype", "Sales Invoice")
 
+        # ========================================================================
+        # OPTIMIZATION: Cache POS Settings to avoid repeated DB queries
+        # Fetch all needed settings in a single query at the start
+        # ========================================================================
+        pos_settings_cache = None
+        if pos_profile:
+            pos_settings_cache = frappe.db.get_value(
+                DOCTYPE_POS_SETTINGS,
+                {"pos_profile": pos_profile},
+                [
+                    FIELD_ALLOW_USER_TO_EDIT_RATE,
+                    FIELD_MAX_DISCOUNT_ALLOWED,
+                    FIELD_DISABLE_ROUNDED_TOTAL,
+                    FIELD_ALLOW_NEGATIVE_STOCK
+                ],
+                as_dict=True
+            )
+
         # Ensure the document type is set
         data.setdefault("doctype", doctype)
 
@@ -396,64 +606,56 @@ def update_invoice(data):
         invoice_doc.flags.ignore_pricing_rule = True
 
         # ========================================================================
-        # DISCOUNT CALCULATION - CRITICAL LOGIC
+        # DISCOUNT & RATE CALCULATION - CRITICAL LOGIC
         # ========================================================================
-        # Problem: Frontend sends rate (discounted) and discount_percentage
-        # Solution: Reverse-calculate price_list_rate (original price) to avoid double discount
-        #
-        # Formula: rate = price_list_rate * (1 - discount_percentage/100)
-        # Reverse: price_list_rate = rate / (1 - discount_percentage/100)
+        # Two scenarios:
+        # 1. Normal discount: Frontend sends rate (discounted) and discount_percentage
+        #    - Reverse-calculate price_list_rate to avoid double discount
+        # 2. Manual rate edit: Frontend sends edited rate with original_rate preserved
+        #    - Skip reverse calculation, preserve original price_list_rate for audit
         # ========================================================================
         for item in invoice_doc.get("items", []):
             item_rate = flt(item.rate or 0)
             discount_pct = flt(item.discount_percentage or 0)
+            is_manual_edit = cint(item.get(FIELD_IS_RATE_MANUALLY_EDITED) or 0)
 
-            # If item has a discount, reverse-calculate the original price_list_rate
-            if discount_pct > 0 and discount_pct < 100:
-                if item_rate > 0:
-                    # Reverse calculation to get original price
-                    item.price_list_rate = item_rate / (1 - discount_pct / 100)
-                elif not item.get("price_list_rate"):
-                    # Fallback: if rate is 0 but discount exists (edge case)
+            if is_manual_edit:
+                # MANUAL RATE EDIT: preserve original price_list_rate for audit
+                original_rate = flt(item.get(FIELD_ORIGINAL_RATE) or item.get(FIELD_PRICE_LIST_RATE) or 0)
+                if original_rate > 0:
+                    item.price_list_rate = original_rate
+
+                # Validate manual rate edit against business rules (uses cached settings)
+                validation = validate_manual_rate_edit(item, pos_profile, pos_settings_cache)
+                if not validation.get("valid"):
+                    frappe.throw(validation.get("message"))
+            else:
+                # NORMAL DISCOUNT: reverse-calculate price_list_rate
+                current_price_list_rate = flt(item.get(FIELD_PRICE_LIST_RATE) or 0)
+                item.price_list_rate = calculate_price_list_rate(
+                    item_rate, discount_pct, current_price_list_rate
+                )
+
+                # Ensure price_list_rate is never less than rate (data integrity)
+                if flt(item.price_list_rate) < item_rate:
                     item.price_list_rate = item_rate
-            elif not item.get("price_list_rate"):
-                # No discount or price_list_rate not set - use rate as is
-                item.price_list_rate = item_rate
-
-            # Ensure price_list_rate is never less than rate (data integrity)
-            if flt(item.price_list_rate) < item_rate:
-                item.price_list_rate = item_rate
-
-            # IMPORTANT: Keep the rate from frontend (do NOT set to 0)
-            # ERPNext will recalculate if needed, but preserving frontend rate
-            # prevents rounding issues and ensures UI matches invoice
 
         # Set invoice flags BEFORE calculations
-        if doctype == "Sales Invoice":
+        if doctype == DOCTYPE_SALES_INVOICE:
             invoice_doc.is_pos = 1
             invoice_doc.update_stock = 1
 
         # ========================================================================
         # ROUNDING CONFIGURATION
         # ========================================================================
-        # Load rounding preference from POS Settings
+        # Load rounding preference from POS Settings (uses cached settings)
         # When disabled (0): ERPNext rounds to nearest whole number
         # When enabled (1): Shows exact amount without rounding
         # ========================================================================
         disable_rounded = 1  # Default: disable rounding for POS (show exact amounts)
 
-        if pos_profile:
-            try:
-                pos_settings_value = frappe.db.get_value(
-                    "POS Settings",
-                    {"pos_profile": pos_profile},
-                    "disable_rounded_total"
-                )
-                if pos_settings_value is not None:
-                    disable_rounded = cint(pos_settings_value)
-            except Exception as e:
-                # Log error but continue with default
-                frappe.log_error(f"Error loading rounding setting: {str(e)}", "POS Invoice Creation")
+        if pos_settings_cache and pos_settings_cache.get(FIELD_DISABLE_ROUNDED_TOTAL) is not None:
+            disable_rounded = cint(pos_settings_cache.get(FIELD_DISABLE_ROUNDED_TOTAL))
 
         invoice_doc.disable_rounded_total = disable_rounded
 
@@ -513,6 +715,8 @@ def update_invoice(data):
                 invoice_doc.coupon_code = coupon_code
 
         # Save as draft
+        # NOTE: Manual rate edit logging is done in submit_invoice after successful submission
+        # This ensures audit logs are only created for completed transactions
         invoice_doc.flags.ignore_permissions = True
         frappe.flags.ignore_account_permission = True
         invoice_doc.docstatus = 0
@@ -562,7 +766,19 @@ def submit_invoice(invoice=None, data=None):
             invoice = json.loads(invoice)
 
         pos_profile = invoice.get("pos_profile")
-        doctype = invoice.get("doctype", "Sales Invoice")
+        doctype = invoice.get("doctype", DOCTYPE_SALES_INVOICE)
+
+        # ========================================================================
+        # OPTIMIZATION: Cache POS Settings to avoid repeated DB queries
+        # ========================================================================
+        pos_settings_cache = None
+        if pos_profile:
+            pos_settings_cache = frappe.db.get_value(
+                DOCTYPE_POS_SETTINGS,
+                {"pos_profile": pos_profile},
+                [FIELD_ALLOW_NEGATIVE_STOCK],
+                as_dict=True
+            )
 
         invoice_name = invoice.get("name")
 
@@ -576,13 +792,13 @@ def submit_invoice(invoice=None, data=None):
             invoice_doc.update(invoice)
 
         # Ensure update_stock is set for Sales Invoice
-        if doctype == "Sales Invoice":
+        if doctype == DOCTYPE_SALES_INVOICE:
             invoice_doc.update_stock = 1
 
         # Copy accounting dimensions from POS Profile if not already set
         if pos_profile and not invoice_doc.get("branch"):
             try:
-                pos_profile_doc = frappe.get_cached_doc("POS Profile", pos_profile)
+                pos_profile_doc = frappe.get_cached_doc(DOCTYPE_POS_PROFILE, pos_profile)
                 if hasattr(pos_profile_doc, "branch") and pos_profile_doc.branch:
                     invoice_doc.branch = pos_profile_doc.branch
                     # Also set branch on all items for GL entries
@@ -593,7 +809,7 @@ def submit_invoice(invoice=None, data=None):
                 pass  # Branch is optional, continue without it
 
         # Set accounts for all payment methods before saving
-        if doctype == "Sales Invoice" and hasattr(invoice_doc, "payments"):
+        if doctype == DOCTYPE_SALES_INVOICE and hasattr(invoice_doc, "payments"):
             for payment in invoice_doc.payments:
                 if payment.mode_of_payment:
                     account_info = get_payment_account(
@@ -631,16 +847,10 @@ def submit_invoice(invoice=None, data=None):
         # Auto-set batch numbers for returns
         _auto_set_return_batches(invoice_doc)
 
-        # Check if POS Settings allows negative stock
+        # Check if POS Settings allows negative stock (uses cached settings)
         pos_settings_allow_negative = False
-        if pos_profile:
-            pos_settings_allow_negative = cint(
-                frappe.db.get_value(
-                    "POS Settings",
-                    {"pos_profile": pos_profile},
-                    "allow_negative_stock"
-                ) or 0
-            )
+        if pos_settings_cache:
+            pos_settings_allow_negative = cint(pos_settings_cache.get(FIELD_ALLOW_NEGATIVE_STOCK) or 0)
 
         # Validate stock availability only if negative stock is not allowed
         if not pos_settings_allow_negative:
@@ -660,7 +870,7 @@ def submit_invoice(invoice=None, data=None):
             # If submission fails, cleanup the invoice to prevent stock reservation issues
             try:
                 # Reload to get current state
-                current_doc = frappe.get_doc("Sales Invoice", invoice_doc.name)
+                current_doc = frappe.get_doc(DOCTYPE_SALES_INVOICE, invoice_doc.name)
 
                 # If already submitted, must cancel before deleting
                 if current_doc.docstatus == 1:
@@ -669,7 +879,7 @@ def submit_invoice(invoice=None, data=None):
 
                 # Now delete the cancelled/draft invoice
                 frappe.delete_doc(
-                    "Sales Invoice",
+                    DOCTYPE_SALES_INVOICE,
                     invoice_doc.name,
                     force=True,
                     ignore_permissions=True,
@@ -701,6 +911,19 @@ def submit_invoice(invoice=None, data=None):
                     alert=True,
                     indicator="orange"
                 )
+
+        # Log manual rate edits for audit trail (only after successful submission)
+        if doctype == DOCTYPE_SALES_INVOICE:
+            incoming_items = invoice.get("items") or []
+            for item in incoming_items:
+                if cint(item.get(FIELD_IS_RATE_MANUALLY_EDITED)):
+                    log_manual_rate_edit({
+                        FIELD_ITEM_CODE: item.get(FIELD_ITEM_CODE),
+                        "item_name": item.get("item_name"),
+                        FIELD_RATE: flt(item.get(FIELD_RATE)),
+                        FIELD_ORIGINAL_RATE: flt(item.get(FIELD_ORIGINAL_RATE) or item.get(FIELD_PRICE_LIST_RATE)),
+                        FIELD_IS_RATE_MANUALLY_EDITED: 1
+                    }, invoice_doc.name)
 
         # Return complete invoice details
         return {

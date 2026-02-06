@@ -1832,6 +1832,16 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 			itemGroups.value = data?.item_groups_hierarchy || []
 			log.info(`Loaded ${itemGroups.value.length} item groups with hierarchy`)
 
+			// Cache profile data for offline use (survives component remount)
+			try {
+				sessionStorage.setItem(`pos_profile_data:${profile}`, JSON.stringify({
+					profileItemGroups: profileItemGroups.value,
+					itemGroups: itemGroups.value,
+				}))
+			} catch (e) {
+				// sessionStorage might be full or unavailable
+			}
+
 			// Set up real-time listener
 			posProfileUpdateCleanup = onPosProfileUpdate(async (updateData) => {
 				await handlePosProfileUpdateWithRecovery(updateData, profile)
@@ -1846,6 +1856,27 @@ export const useItemSearchStore = defineStore("itemSearch", () => {
 			}
 		} catch (error) {
 			log.error("Error fetching POS Profile data", error)
+
+			// Offline fallback: restore item groups from session cache
+			// This keeps group tabs visible after language change while offline
+			try {
+				const cached = sessionStorage.getItem(`pos_profile_data:${profile}`)
+				if (cached) {
+					const parsed = JSON.parse(cached)
+					profileItemGroups.value = parsed.profileItemGroups || []
+					itemGroups.value = parsed.itemGroups || []
+					log.info(`Restored ${itemGroups.value.length} item groups from session cache (offline)`)
+
+					// Still load items from IndexedDB cache
+					if (autoLoadItems) {
+						loadAllItems(profile)
+					}
+					return
+				}
+			} catch (e) {
+				// Cache parse failed
+			}
+
 			profileItemGroups.value = []
 			itemGroups.value = []
 		}

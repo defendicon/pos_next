@@ -1325,7 +1325,7 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20)
 
 
 @frappe.whitelist()
-def get_items_bulk(pos_profile, item_groups=None, limit=2000):
+def get_items_bulk(pos_profile, item_groups=None, start=0, limit=2000):
 	"""
 	Fetch items from multiple item groups in a SINGLE query.
 	Eliminates N+1 problem where frontend was making one API call per group.
@@ -1333,6 +1333,7 @@ def get_items_bulk(pos_profile, item_groups=None, limit=2000):
 	Args:
 		pos_profile: POS Profile name
 		item_groups: JSON array of item group names (optional - if empty, fetch all)
+		start: Offset for pagination (default 0)
 		limit: Max items to return (default 2000)
 	"""
 	try:
@@ -1376,9 +1377,10 @@ def get_items_bulk(pos_profile, item_groups=None, limit=2000):
 			WHERE {where_clause}
 			GROUP BY {group_by_columns}
 			ORDER BY i.item_name ASC
-			LIMIT %s
+			LIMIT %s OFFSET %s
 		"""
 		params.append(int(limit))
+		params.append(int(start))
 		items = frappe.db.sql(query, tuple(params), as_dict=1)
 
 		if not items:
@@ -1465,6 +1467,38 @@ def get_items_bulk(pos_profile, item_groups=None, limit=2000):
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Get Items Bulk Error")
 		frappe.throw(_("Error fetching items: {0}").format(str(e)))
+
+
+@frappe.whitelist()
+def get_items_count(pos_profile, item_group=None):
+	"""
+	Get total count of POS-eligible items for progress tracking and smart pagination.
+
+	Uses the same filtering logic as get_items (via _build_item_base_conditions)
+	to ensure consistent results. Lightweight — no enrichment, just COUNT.
+
+	Args:
+		pos_profile: POS Profile name
+		item_group: Optional item group filter (expands to descendants)
+
+	Returns:
+		int: Total count of distinct matching items
+	"""
+	try:
+		pos_profile_doc = frappe.get_cached_doc("POS Profile", pos_profile)
+		conditions, params = _build_item_base_conditions(pos_profile_doc, item_group)
+
+		where_clause = " AND ".join(conditions)
+		query = f"""
+			SELECT COUNT(DISTINCT i.name) as total
+			FROM `tabItem` i
+			WHERE {where_clause}
+		"""
+		result = frappe.db.sql(query, tuple(params), as_dict=1)
+		return result[0].total if result else 0
+	except Exception as e:
+		frappe.log_error(frappe.get_traceback(), "Get Items Count Error")
+		frappe.throw(_("Error fetching items count: {0}").format(str(e)))
 
 
 @frappe.whitelist()

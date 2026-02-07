@@ -18,6 +18,7 @@
   "section_break_general",
   "allow_user_to_edit_additional_discount",
   "allow_user_to_edit_item_discount",
+  "allow_user_to_edit_rate",
   "use_percentage_discount",
   "max_discount_allowed",
   "column_break_general",
@@ -169,6 +170,13 @@
    "fieldname": "allow_user_to_edit_item_discount",
    "fieldtype": "Check",
    "label": "Allow Item Discount"
+  },
+  {
+   "default": "0",
+   "description": "Allow user to edit item rate in cart. Rate editing is automatically disabled when promotional offers are applied to an item.",
+   "fieldname": "allow_user_to_edit_rate",
+   "fieldtype": "Check",
+   "label": "Allow User To Edit Rate"
   },
   {
    "default": "0",

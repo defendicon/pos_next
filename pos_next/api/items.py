@@ -1051,13 +1051,13 @@ def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20,
 			word_conditions = " AND ".join([f"{search_text} LIKE %s"] * len(search_words))
 
 			# Also match if barcode contains the search term
-			barcode_condition = "ib.barcode LIKE %s"
+			barcode_condition = "ib.barcode = %s"
 
 			# Combine: match item fields OR match barcode
 			conditions.append(f"(({word_conditions}) OR {barcode_condition})")
 			params.extend([f"%{word}%" for word in search_words])
-			params.append(f"%{effective_search_term}%")  # For barcode matching
-
+			params.append(effective_search_term)  # For barcode matching
+			
 			# Relevance scoring with case-insensitive comparison
 			# Exact barcode match gets highest priority, use MAX() for grouping
 			prefix_pattern = f"{effective_search_term}%"

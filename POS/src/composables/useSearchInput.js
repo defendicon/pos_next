@@ -1,15 +1,20 @@
 import { ref, watch, nextTick, onUnmounted } from "vue"
+import { QueuedMutex } from "@/utils/mutex"
 
 /**
  * Composable for search input, barcode scanning, and auto-add logic.
  *
  * Owns all search-input state, timers, and event handlers with proper
- * concurrency control.  Extracted from ItemsSelector.vue to fix:
- *   - Race condition: autoSearchTimer firing after clearSearch
- *   - No concurrency guard on overlapping handleBarcodeSearch calls
- *   - Dead scanner-speed-detection code
- *   - Scattered focus / getElementById fallbacks
- *   - handleSearchClick skipping timer cleanup
+ * concurrency control.  Extracted from ItemsSelector.vue.
+ *
+ * Concurrency model:
+ *   - On Enter (or auto-add timeout), the barcode is **snapshotted** from the
+ *     DOM input immediately, then the input is cleared so the next scan starts
+ *     into a clean field.
+ *   - The snapshot is pushed into a {@link QueuedMutex}-backed queue
+ *     (`processBarcodeScan`), which processes barcode lookups sequentially.
+ *   - This guarantees no barcode is ever lost, even when scanning different
+ *     items faster than the API can respond (~50 ms between scans).
  *
  * @param {Object} options
  * @param {Object} options.itemStore          - Pinia item-search store
@@ -27,7 +32,7 @@ export function useSearchInput({ itemStore, filteredItems, onItemFound, showWarn
 
 	// --- Internal (non-reactive) ---
 	let autoSearchTimer = null
-	let barcodeSearchGeneration = 0
+	const barcodeQueue = new QueuedMutex({ timeout: 10000, name: "BarcodeSearch" })
 
 	// ---- Timer helpers ----
 
@@ -67,11 +72,18 @@ export function useSearchInput({ itemStore, filteredItems, onItemFound, showWarn
 	function handleKeyDown(event) {
 		if (event.key === "Enter") {
 			event.preventDefault()
-
-			// Clear timer BEFORE the async call (fixes race condition)
 			clearAutoSearchTimer()
 
-			handleBarcodeSearch(autoAddEnabled.value)
+			// Snapshot the barcode NOW from the DOM input, before anything overwrites it
+			const barcode = searchInputRef.value?.value?.trim() || itemStore.searchTerm?.trim()
+			if (barcode) {
+				// Clear input immediately so next scan starts clean
+				itemStore.clearSearch()
+				if (searchInputRef.value) searchInputRef.value.value = ""
+
+				// Queue the search with the captured barcode
+				processBarcodeScan(barcode, autoAddEnabled.value)
+			}
 			return
 		}
 		// All other keys: no special handling needed.
@@ -102,7 +114,12 @@ export function useSearchInput({ itemStore, filteredItems, onItemFound, showWarn
 		// Auto-add: after user stops typing for 500 ms, trigger barcode search
 		if (autoAddEnabled.value && value.trim().length > 0) {
 			autoSearchTimer = setTimeout(() => {
-				handleBarcodeSearch(true)
+				const barcode = searchInputRef.value?.value?.trim() || itemStore.searchTerm?.trim()
+				if (barcode) {
+					itemStore.clearSearch()
+					if (searchInputRef.value) searchInputRef.value.value = ""
+					processBarcodeScan(barcode, true)
+				}
 			}, 500)
 		}
 	}
@@ -113,57 +130,51 @@ export function useSearchInput({ itemStore, filteredItems, onItemFound, showWarn
 	}
 
 	/**
-	 * Barcode / exact-match search with generation-counter concurrency guard.
+	 * Queue a barcode scan for sequential processing.
 	 *
-	 * If a newer call starts while we're awaiting the API, the older call
-	 * bails out — preventing double-add and stale-result bugs.
+	 * The barcode string is already captured (snapshotted) by the caller —
+	 * it is never read from shared state here. The {@link QueuedMutex}
+	 * ensures scans execute one at a time so every scan is resolved before
+	 * the next begins, preventing double-adds and lost barcodes.
+	 *
+	 * Lookup order:
+	 *   1. Exact barcode match via `itemStore.searchByBarcode()`
+	 *   2. Fallback: single match in `filteredItems` → auto-select
+	 *   3. Zero or multiple matches → warning toast
+	 *
+	 * @param {string}  barcode      - Pre-captured barcode value
+	 * @param {boolean} forceAutoAdd - When true, item is added without user click
 	 */
-	async function handleBarcodeSearch(forceAutoAdd = false) {
-		const barcode = itemStore.searchTerm?.trim()
-		if (!barcode) return
-
+	function processBarcodeScan(barcode, forceAutoAdd) {
 		const shouldAutoAdd = forceAutoAdd || (scannerEnabled.value && autoAddEnabled.value)
 
-		// Increment generation; capture our own value
-		const myGeneration = ++barcodeSearchGeneration
-
-		try {
-			const item = await itemStore.searchByBarcode(barcode)
-
-			// Bail if a newer search started while we were awaiting
-			if (myGeneration !== barcodeSearchGeneration) return
-
-			if (item) {
-				if (onItemFound(item, shouldAutoAdd)) {
-					clearSearchAndResetInput()
+		barcodeQueue.withLock(async () => {
+			try {
+				const item = await itemStore.searchByBarcode(barcode)
+				if (item) {
+					onItemFound(item, shouldAutoAdd)
+					focusSearchInput()
+					return
 				}
-				return
+			} catch (error) {
+				console.error("Barcode API error:", error)
 			}
-		} catch (error) {
-			console.error("Barcode API error:", error)
-			if (myGeneration !== barcodeSearchGeneration) return
-		}
 
-		// Bail again after the catch — another search may have started
-		if (myGeneration !== barcodeSearchGeneration) return
-
-		// Fallback: single match in filtered results → auto-select
-		if (filteredItems.value.length === 1) {
-			if (onItemFound(filteredItems.value[0], shouldAutoAdd)) {
-				clearSearchAndResetInput()
-			}
-		} else if (filteredItems.value.length === 0) {
-			showWarning(__('Item Not Found: No item found with barcode: {0}', [barcode]))
-			if (shouldAutoAdd) {
-				clearSearchAndResetInput()
-			}
-		} else {
-			if (shouldAutoAdd) {
-				showWarning(__('Multiple Items Found: {0} items match barcode. Please refine search.', [filteredItems.value.length]))
+			// Fallback: single match in filtered results → auto-select
+			if (filteredItems.value.length === 1) {
+				onItemFound(filteredItems.value[0], shouldAutoAdd)
+				focusSearchInput()
+			} else if (filteredItems.value.length === 0) {
+				showWarning(__('Item Not Found: No item found with barcode: {0}', [barcode]))
 			} else {
-				showWarning(__('Multiple Items Found: {0} items match. Please select one.', [filteredItems.value.length]))
+				if (shouldAutoAdd) {
+					showWarning(__('Multiple Items Found: {0} items match barcode. Please refine search.', [filteredItems.value.length]))
+				} else {
+					showWarning(__('Multiple Items Found: {0} items match. Please select one.', [filteredItems.value.length]))
+				}
 			}
-		}
+			focusSearchInput()
+		})
 	}
 
 	// ---- Toggles ----

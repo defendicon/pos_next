@@ -377,6 +377,9 @@ def search_by_barcode(barcode, pos_profile):
 			company=pos_profile_doc.company,
 		)
 
+		# Ensure warehouse is set on the response (needed for cart/invoice)
+		item_details["warehouse"] = pos_profile_doc.warehouse
+
 		return item_details
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Search by Barcode Error")

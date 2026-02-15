@@ -852,7 +852,7 @@
 											inputmode="decimal"
 											:disabled="item.is_resolved_barcode"
 											:class="[
-												'w-14 sm:w-16 h-6 sm:h-7 text-center border-0 text-xs sm:text-sm font-bold focus:outline-none',
+												'w-16 sm:w-20 h-6 sm:h-7 text-center border-0 text-xs sm:text-sm font-bold focus:outline-none',
 												item.is_resolved_barcode
 													? 'bg-amber-50 text-amber-700 cursor-not-allowed'
 													: 'bg-white text-gray-900 focus:ring-2 focus:ring-blue-500'

@@ -322,9 +322,17 @@ def search_by_barcode(barcode, pos_profile):
 		if not pos_profile:
 			frappe.throw(_("POS Profile is required"))
 
+		# Try to resolve weighted/priced barcodes if barcode_resolver is available
+		resolved_barcode_data = None
+		effective_barcode = barcode
+		from pos_next.services.barcode import resolve_barcode
+		resolved_barcode_data = resolve_barcode(barcode, pos_profile)
+		if resolved_barcode_data and resolved_barcode_data.get("item_barcode"):
+			effective_barcode = resolved_barcode_data["item_barcode"]
+
 		# Search for item by barcode - also get UOM if barcode has specific UOM
 		barcode_data = frappe.db.get_value(
-			"Item Barcode", {"barcode": barcode}, ["parent", "uom"], as_dict=True
+			"Item Barcode", {"barcode": effective_barcode}, ["parent", "uom"], as_dict=True
 		)
 
 		if barcode_data:
@@ -332,7 +340,7 @@ def search_by_barcode(barcode, pos_profile):
 			barcode_uom = barcode_data.uom
 		else:
 			# Try searching in item code field directly
-			item_code = frappe.db.get_value("Item", {"name": barcode})
+			item_code = frappe.db.get_value("Item", {"name": effective_barcode})
 			barcode_uom = None
 
 		if not item_code:
@@ -379,6 +387,33 @@ def search_by_barcode(barcode, pos_profile):
 
 		# Ensure warehouse is set on the response (needed for cart/invoice)
 		item_details["warehouse"] = pos_profile_doc.warehouse
+
+		# Build uom_prices map (same pattern as get_items)
+		uom_prices = {}
+		if pos_profile_doc.selling_price_list:
+			ItemPrice = DocType("Item Price")
+			prices = (
+				frappe.qb.from_(ItemPrice)
+				.select(ItemPrice.uom, ItemPrice.price_list_rate)
+				.where(ItemPrice.item_code == item_code)
+				.where(ItemPrice.price_list == pos_profile_doc.selling_price_list)
+				.run(as_dict=True)
+			)
+			for p in prices:
+				if p["uom"]:
+					uom_prices[p["uom"]] = p["price_list_rate"]
+
+		item_details["uom_prices"] = uom_prices
+
+		# Apply resolved barcode data (weighted/priced) to the item details
+		if resolved_barcode_data:
+			from pos_next.services.barcode import compute_resolved_item_data
+			resolved_item_data = compute_resolved_item_data(
+				resolved_barcode_data,
+				item=item_details,
+			)
+			if resolved_item_data:
+				item_details.update(resolved_item_data)
 
 		return item_details
 	except Exception as e:

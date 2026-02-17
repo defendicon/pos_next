@@ -361,27 +361,116 @@
 		<div v-if="items.length > 0" class="px-2 py-2 border-b border-gray-200 bg-white">
 			<div class="flex items-center justify-between mb-1.5">
 				<h2 class="text-xs font-bold text-gray-900">{{ __("Cart Items") }}</h2>
-				<button
-					@click="$emit('clear-cart')"
-					class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors touch-manipulation"
-					type="button"
-					:title="__('Clear all items')"
-				>
-					<svg
-						class="w-4 h-4"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="2"
+				<div class="flex items-center gap-1">
+					<!-- Sort Dropdown -->
+					<div class="relative" ref="cartSortContainer">
+						<button
+							@click="toggleCartSortDropdown"
+							:class="[
+								'p-1.5 rounded-lg transition-[background-color,box-shadow] duration-75 touch-manipulation border',
+								cartSortBy
+									? 'bg-blue-50 border-blue-400 text-blue-700 shadow-sm'
+									: 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50 active:bg-gray-100'
+							]"
+							:title="cartSortBy
+								? (cartSortOrder === 'asc'
+									? __('Sorted by {0} A-Z', [getCartSortLabel()])
+									: __('Sorted by {0} Z-A', [getCartSortLabel()]))
+								: __('Sort cart items')"
+							:aria-label="__('Sort cart items')"
+							type="button"
+						>
+							<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+							</svg>
+						</button>
+
+						<!-- Sort Dropdown Menu -->
+						<div
+							v-if="showCartSortDropdown"
+							@click.stop
+							class="absolute end-0 mt-1 w-52 bg-white rounded-lg shadow-xl border border-gray-200 z-[9999]"
+						>
+							<div class="py-2">
+								<div class="px-3 py-2 text-xs font-semibold text-gray-500 uppercase border-b border-gray-100">
+									{{ __('Sort Cart') }}
+								</div>
+								<div class="py-1">
+									<!-- No Sorting (clear) -->
+									<button
+										@click="handleCartSortToggle(null)"
+										:class="[
+											'w-full px-3 py-2 text-sm transition-colors flex items-center justify-between group',
+											!cartSortBy ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50'
+										]"
+										type="button"
+									>
+										<span class="flex items-center gap-2.5">
+											<svg class="w-4 h-4 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+											</svg>
+											<span>{{ __('No Sorting') }}</span>
+										</span>
+									</button>
+
+									<div class="h-px bg-gray-100 my-1"></div>
+
+									<!-- Sort Options Loop -->
+									<button
+										v-for="option in CART_SORT_OPTIONS"
+										:key="option.field"
+										@click="handleCartSortToggle(option.field)"
+										:class="[
+											'w-full px-3 py-2 text-sm transition-colors flex items-center justify-between group',
+											cartSortBy === option.field ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50'
+										]"
+										type="button"
+									>
+										<span class="flex items-center gap-2.5">
+											<svg class="w-4 h-4 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="option.icon"/>
+											</svg>
+											<span>{{ option.label }}</span>
+										</span>
+										<!-- Sort direction icon -->
+										<svg
+											class="w-5 h-5"
+											:class="cartSortBy === option.field ? 'text-blue-600' : 'text-gray-300'"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+										>
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="CART_SORT_ICONS[getCartSortIconState(option.field)]"/>
+										</svg>
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Clear Cart Button -->
+					<button
+						@click="$emit('clear-cart')"
+						class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors touch-manipulation"
+						type="button"
+						:title="__('Clear all items')"
 					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V5a2 2 0 00-2-2h-2a2 2 0 00-2 2v2M4 7h16"
-						/>
-					</svg>
-					<span>{{ __("Clear") }}</span>
-				</button>
+						<svg
+							class="w-4 h-4"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V5a2 2 0 00-2-2h-2a2 2 0 00-2 2v2M4 7h16"
+							/>
+						</svg>
+						<span>{{ __("Clear") }}</span>
+					</button>
+				</div>
 			</div>
 
 			<!-- Offers & Coupon Buttons -->
@@ -663,8 +752,8 @@
 
 			<div v-else class="flex flex-col gap-0.5 sm:gap-1">
 				<div
-					v-for="(item, index) in items"
-					:key="index"
+					v-for="(item, index) in sortedItems"
+					:key="item.item_code + '-' + (item.uom || '')"
 					@click="openEditDialog(item)"
 					class="bg-white border border-gray-200 rounded-md p-1.5 sm:p-2 hover:border-blue-300 hover:shadow-md transition-all duration-200 active:scale-[0.99] cursor-pointer group"
 				>
@@ -1296,6 +1385,47 @@ const selectedItem = ref(null); // Item being edited
 // UOM dropdown state - tracks which item's UOM dropdown is open (by item_code)
 const openUomDropdown = ref(null);
 
+// Cart sort state
+const cartSortBy = ref(null);
+const cartSortOrder = ref('asc');
+const showCartSortDropdown = ref(false);
+const cartSortContainer = ref(null);
+
+// Cart sort configuration
+const CART_SORT_OPTIONS = Object.freeze([
+	{
+		field: 'order',
+		label: __('Addition Order'),
+		icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'
+	},
+	{
+		field: 'name',
+		label: __('Name'),
+		icon: 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z'
+	},
+	{
+		field: 'price',
+		label: __('Price'),
+		icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z'
+	},
+	{
+		field: 'quantity',
+		label: __('Quantity'),
+		icon: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'
+	},
+	{
+		field: 'total',
+		label: __('Total'),
+		icon: 'M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z'
+	},
+])
+
+const CART_SORT_ICONS = Object.freeze({
+	ascending: 'M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12',
+	descending: 'M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4',
+	inactive: 'M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4'
+})
+
 /**
  * ============================================================================
  * API RESOURCES
@@ -1491,6 +1621,33 @@ const displayGrandTotal = computed(() => {
 	// Always: displaySubtotal + tax - discount
 	// This makes the display consistent and intuitive
 	return displaySubtotal.value + props.taxAmount - props.discountAmount;
+});
+
+const sortedItems = computed(() => {
+	if (!cartSortBy.value || (cartSortBy.value === 'order' && cartSortOrder.value === 'asc')) {
+		return props.items
+	}
+	if (cartSortBy.value === 'order') {
+		return [...props.items].reverse()
+	}
+	const dir = cartSortOrder.value === 'asc' ? 1 : -1
+	return [...props.items].sort((a, b) => {
+		switch (cartSortBy.value) {
+			case 'name':
+				return dir * (a.item_name || '').localeCompare(b.item_name || '')
+			case 'price':
+				return dir * ((a.rate || 0) - (b.rate || 0))
+			case 'quantity':
+				return dir * ((a.quantity || 0) - (b.quantity || 0))
+			case 'total': {
+				const aTotal = a.amount || (a.rate || 0) * (a.quantity || 0)
+				const bTotal = b.amount || (b.rate || 0) * (b.quantity || 0)
+				return dir * (aTotal - bTotal)
+			}
+			default:
+				return 0
+		}
+	})
 });
 
 /**
@@ -1841,10 +1998,48 @@ function selectDocType(type) {
 	cartStore.setTargetDoctype(type);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Cart Sort Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toggleCartSortDropdown() {
+	showCartSortDropdown.value = !showCartSortDropdown.value;
+}
+
+function handleCartSortToggle(field) {
+	if (!field) {
+		// Clear sorting — return to addition order
+		cartSortBy.value = null;
+		cartSortOrder.value = 'asc';
+		showCartSortDropdown.value = false;
+		return;
+	}
+
+	// If clicking the same field, toggle between asc/desc
+	if (cartSortBy.value === field) {
+		cartSortOrder.value = cartSortOrder.value === 'asc' ? 'desc' : 'asc';
+	} else {
+		// New field — start with ascending
+		cartSortBy.value = field;
+		cartSortOrder.value = 'asc';
+	}
+}
+
+function getCartSortLabel() {
+	const option = CART_SORT_OPTIONS.find(opt => opt.field === cartSortBy.value);
+	return option?.label || cartSortBy.value;
+}
+
+function getCartSortIconState(field) {
+	if (cartSortBy.value !== field) return 'inactive';
+	return cartSortOrder.value === 'asc' ? 'ascending' : 'descending';
+}
+
 /**
  * Handle clicks outside interactive elements.
  * - Closes customer search dropdown when clicking outside
  * - Closes UOM dropdown when clicking outside
+ * - Closes cart sort dropdown when clicking outside
  *
  * @param {MouseEvent} event - Click event
  */
@@ -1874,6 +2069,16 @@ function handleOutsideClick(event) {
 		if (!clickedInsideUomDropdown) {
 			openUomDropdown.value = null;
 		}
+	}
+
+	// Close cart sort dropdown if clicking outside
+	if (
+		showCartSortDropdown.value &&
+		cartSortContainer.value &&
+		target instanceof Node &&
+		!cartSortContainer.value.contains(target)
+	) {
+		showCartSortDropdown.value = false;
 	}
 }
 

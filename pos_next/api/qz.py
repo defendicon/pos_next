@@ -10,8 +10,8 @@ The private key never leaves the server — the browser requests signatures on d
 Setup:
   1. Call `setup_qz_certificate` (System Manager only) to generate a self-signed
      cert + private key pair under {site}/private/qz/.
-  2. Copy the generated `digital-certificate.crt` to each POS machine as
-     `override.crt` in the QZ Tray installation directory, then restart QZ Tray.
+  2. Download the certificate from POS Settings and import it into QZ Tray
+     on each POS machine, then restart QZ Tray.
   3. The frontend calls `get_certificate` once on connect and `sign_message`
      on every QZ Tray operation — no user interaction required.
 """
@@ -58,6 +58,23 @@ def get_certificate():
 
 
 @frappe.whitelist()
+def get_certificate_download():
+	"""Return the certificate PEM and company name for download."""
+	path = _cert_path()
+	if not os.path.exists(path):
+		frappe.throw(
+			_("QZ Tray certificate not found. Ask an administrator to run Setup QZ Certificate."),
+			title=_("QZ Certificate Missing"),
+		)
+
+	with open(path, "r") as f:
+		pem = f.read()
+
+	company = frappe.db.get_default("company") or ""
+	return {"pem": pem, "company": company}
+
+
+@frappe.whitelist()
 def sign_message(message):
 	"""Sign a message with the private key for QZ Tray.
 
@@ -94,8 +111,8 @@ def setup_qz_certificate():
 	"""Generate a self-signed certificate + private key for QZ Tray signing.
 
 	System Manager only. Skips generation if both files already exist.
-	Returns the path to the certificate file so the admin can copy it to
-	POS machines as override.crt.
+	Returns the path to the certificate file so the admin can download
+	and import it into QZ Tray on each POS machine.
 	"""
 	if "System Manager" not in frappe.get_roles():
 		frappe.throw(_("Only System Managers can set up QZ certificates."), frappe.PermissionError)
@@ -156,8 +173,8 @@ def setup_qz_certificate():
 
 	frappe.msgprint(
 		_("QZ Tray certificate generated successfully.<br><br>"
-		  "Copy <code>{0}</code> to each POS machine as <code>override.crt</code> "
-		  "in the QZ Tray installation directory, then restart QZ Tray.").format(cert_path),
+		  "Download the certificate from POS Settings and import it into "
+		  "QZ Tray on each POS machine, then restart QZ Tray."),
 		title=_("QZ Certificate Ready"),
 		indicator="green",
 	)

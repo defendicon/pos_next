@@ -27,6 +27,11 @@ const printerOptions = computed(() =>
 	printers.value.map((p) => ({ label: p, value: p }))
 )
 
+function _buildCertFileName(company) {
+	const safeName = company?.replace(/[^a-zA-Z0-9_\- ]/g, "").trim()
+	return safeName ? `${safeName}.crt` : "certificate.crt"
+}
+
 // ── localStorage helpers ──────────────────────────────────────────────
 function _loadCertReady() {
 	try {
@@ -142,17 +147,17 @@ export function useQzTray() {
 
 	async function downloadCertificate() {
 		try {
-			const certPem = await call("pos_next.api.qz.get_certificate")
-			const pem = certPem?.message || certPem
-			if (!pem) {
+			const result = await call("pos_next.api.qz.get_certificate_download")
+			const data = result?.message || result
+			if (!data?.pem) {
 				showError(__("Certificate not found. Generate it first."))
 				return
 			}
-			const blob = new Blob([pem], { type: "application/x-pem-file" })
+			const blob = new Blob([data.pem], { type: "application/x-pem-file" })
 			const url = URL.createObjectURL(blob)
 			const a = document.createElement("a")
 			a.href = url
-			a.download = "override.crt"
+			a.download = _buildCertFileName(data.company)
 			document.body.appendChild(a)
 			a.click()
 			document.body.removeChild(a)

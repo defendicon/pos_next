@@ -477,7 +477,7 @@
 																v-else-if="qzCertStatus === 'untrusted'"
 																class="text-xs text-red-800 leading-relaxed mb-2"
 															>
-																{{ __('Certificate is not installed on this machine. Generate a certificate, download it, and copy it as override.crt to the QZ Tray install folder.') }}
+																{{ __('Certificate is not installed on this machine. Generate a certificate, download it, and import it into QZ Tray.') }}
 															</p>
 															<p
 																v-else
@@ -511,7 +511,7 @@
 																	<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 																		<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
 																	</svg>
-																	{{ __('Download override.crt') }}
+																	{{ __('Download Certificate') }}
 																</button>
 															</div>
 
@@ -519,7 +519,7 @@
 															<p v-if="qzCertReady && qzCertStatus !== 'trusted'" class="text-xs mt-2"
 																:class="qzCertStatus === 'untrusted' ? 'text-red-700' : 'text-amber-700'"
 															>
-																{{ __('Download and copy as') }} <code class="px-1 rounded" :class="qzCertStatus === 'untrusted' ? 'bg-red-100' : 'bg-amber-100'">override.crt</code> {{ __('to the QZ Tray install folder, then restart QZ Tray.') }}
+																{{ __('Download the certificate and import it into QZ Tray, then restart QZ Tray.') }}
 															</p>
 														</div>
 													</div>

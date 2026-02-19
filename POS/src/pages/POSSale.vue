@@ -960,8 +960,8 @@
 <script>
 // Module-scoped init guard — prevents redundant heavy initialization
 // when component remounts due to translationVersion changes.
-// Tracks the profile name so a shift change correctly re-initializes.
-let _initializedProfile = null
+// Tracks the profile+shift key so a user/shift change correctly re-initializes.
+let _initializedKey = null
 let _posInitPromise = null
 </script>
 
@@ -999,6 +999,7 @@ import { useLocale } from "@/composables/useLocale";
 import { session } from "@/data/session";
 import { useUserData } from "@/data/user";
 import { parseError } from "@/utils/errorHandler";
+import { cleanupUserSession } from "@/utils/sessionCleanup";
 import { offlineWorker } from "@/utils/offline/workerClient";
 import { cacheInvoiceHistory, getCachedInvoiceHistory } from "@/utils/offline/sync";
 import { printInvoice, printInvoiceByName, printWithSilentFallback } from "@/utils/printInvoice";
@@ -1327,11 +1328,13 @@ onMounted(async () => {
 		// Start timers for current time and shift duration
 		shiftStore.startTimers();
 
-		// Skip heavy initialization if already completed for this profile
+		// Skip heavy initialization if already completed for this profile+shift
 		// (e.g., remount from translationVersion change). Pinia stores are
 		// singletons — their state survives component remounts.
-		const currentProfileName = shiftStore.profileName;
-		if (_initializedProfile && _initializedProfile === currentProfileName) {
+		// We include the shift name in the key so that a different user's shift
+		// (even on the same POS Profile) correctly triggers re-initialization.
+		const currentInitKey = `${shiftStore.profileName}::${shiftStore.currentShift?.name}`;
+		if (_initializedKey && _initializedKey === currentInitKey) {
 			log.debug("Skipping init — already initialized (remount)");
 			startActivityTracking();
 			updateLayoutBounds();
@@ -1346,7 +1349,7 @@ onMounted(async () => {
 			} catch {
 				// Original caller handles errors; this mount just waits
 			}
-			if (_initializedProfile) startActivityTracking();
+			if (_initializedKey) startActivityTracking();
 			updateLayoutBounds();
 			return;
 		}
@@ -1356,7 +1359,7 @@ onMounted(async () => {
 		_posInitPromise = null;
 
 		// Start session lock tracking only after POS is fully ready
-		if (_initializedProfile) startActivityTracking();
+		if (_initializedKey) startActivityTracking();
 
 		updateLayoutBounds();
 	} catch (error) {
@@ -1411,7 +1414,7 @@ onMounted(async () => {
 		// Load tax rules (depends on settings being loaded)
 		await cartStore.loadTaxRules(shiftStore.profileName, posSettingsStore.settings);
 
-		_initializedProfile = shiftStore.profileName;
+		_initializedKey = `${shiftStore.profileName}::${shiftStore.currentShift?.name}`;
 	}
 });
 
@@ -1713,15 +1716,15 @@ async function handleShiftOpened() {
 	showSuccess(__("You can now start making sales"));
 }
 
-function handleShiftClosed() {
+async function handleShiftClosed() {
 	uiStore.showCloseShiftDialog = false;
 	showSuccess(__("Shift closed successfully"));
 
 	// Check if logout should happen after closing shift
 	if (logoutAfterClose.value) {
 		logoutAfterClose.value = false;
-		// Clear all dialog states to prevent stale state on next login
-		uiStore.resetAllDialogs();
+		_initializedKey = null;
+		await cleanupUserSession();
 		session.logout.submit();
 	} else {
 		setTimeout(() => {
@@ -2152,12 +2155,10 @@ function formatCurrency(amount) {
 	return Number.parseFloat(amount || 0).toFixed(2);
 }
 
-function confirmLogout() {
+async function confirmLogout() {
 	logoutAfterClose.value = false;
-	// Clear cart to prevent stale items on next login
-	cartStore.clearCart();
-	// Clear all dialog states to prevent stale state on next login
-	uiStore.resetAllDialogs();
+	_initializedKey = null;
+	await cleanupUserSession();
 	session.logout.submit();
 }
 

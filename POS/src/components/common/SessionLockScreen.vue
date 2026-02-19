@@ -163,12 +163,11 @@
 <script setup>
 import { ref, watch, nextTick, onMounted, onUnmounted } from "vue"
 import { useSessionLock } from "@/composables/useSessionLock"
-import { usePOSCartStore } from "@/stores/posCart"
-import { usePOSUIStore } from "@/stores/posUI"
 import { session } from "@/data/session"
+import { cleanupUserSession } from "@/utils/sessionCleanup"
 import { offlineState } from "@/utils/offline/offlineState"
 
-const { isLocked, isVerifying, verifyError, lockedUser, unlock, clearLock } = useSessionLock()
+const { isLocked, isVerifying, verifyError, lockedUser, unlock } = useSessionLock()
 
 // Offline state tracking
 const isOffline = ref(offlineState.isOffline)
@@ -191,9 +190,6 @@ const password = ref("")
 const showPassword = ref(false)
 const passwordInputRef = ref(null)
 
-const cartStore = usePOSCartStore()
-const uiStore = usePOSUIStore()
-
 // Auto-focus password input when locked
 watch(isLocked, async (locked) => {
 	if (locked) {
@@ -211,9 +207,7 @@ async function handleUnlock() {
 
 	if (result.sessionExpired) {
 		// Session expired — full logout
-		clearLock()
-		cartStore.clearCart()
-		uiStore.resetAllDialogs()
+		await cleanupUserSession()
 		session.logout.submit()
 		return
 	}
@@ -226,10 +220,8 @@ async function handleUnlock() {
 	}
 }
 
-function handleSignOut() {
-	clearLock()
-	cartStore.clearCart()
-	uiStore.resetAllDialogs()
+async function handleSignOut() {
+	await cleanupUserSession()
 	session.logout.submit()
 }
 </script>

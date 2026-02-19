@@ -97,23 +97,18 @@
 </template>
 
 <script setup>
-import { usePOSCartStore } from "@/stores/posCart"
-import { usePOSUIStore } from "@/stores/posUI"
 import { FeatherIcon } from "frappe-ui"
 import { onMounted, reactive, ref, watch } from "vue"
 import { useRouter } from "vue-router"
 import ShiftOpeningDialog from "../components/ShiftOpeningDialog.vue"
-import { useShift } from "../composables/useShift"
 import { session } from "../data/session"
 import { useSessionLock } from "../composables/useSessionLock"
+import { cleanupUserSession } from "../utils/sessionCleanup"
 import { ensureCSRFToken } from "../utils/csrf"
 import { offlineWorker } from "../utils/offline/workerClient"
 
 const router = useRouter()
-const { shiftState } = useShift()
-const cartStore = usePOSCartStore()
-const uiStore = usePOSUIStore()
-const { clearLock, cachePasswordHashFromLogin } = useSessionLock()
+const { cachePasswordHashFromLogin } = useSessionLock()
 
 const loginForm = reactive({
 	email: "",
@@ -124,7 +119,7 @@ const showShiftDialog = ref(false)
 const showPassword = ref(false)
 
 // Reset state when login page mounts
-onMounted(() => {
+onMounted(async () => {
 	// Clear login form
 	loginForm.email = ""
 	loginForm.password = ""
@@ -139,18 +134,7 @@ onMounted(() => {
 	// If user is already logged in (e.g., after successful login), don't clear their session
 	if (!session.isLoggedIn) {
 		showShiftDialog.value = false
-		clearLock()
-		cartStore.clearCart()
-		uiStore.resetAllDialogs()
-
-		// Clear any stale shift state
-		shiftState.value = {
-			pos_opening_shift: null,
-			pos_profile: null,
-			company: null,
-			isOpen: false,
-		}
-		localStorage.removeItem("pos_shift_data")
+		await cleanupUserSession()
 	}
 })
 

@@ -4,12 +4,14 @@ import { userData } from "@/data/user"
 import { usePOSCartStore } from "@/stores/posCart"
 import { offlineState } from "@/utils/offline/offlineState"
 
-// Lock timeout: 5 minutes
-const LOCK_TIMEOUT_MS = 5 * 60 * 1000
 // Throttle: ignore activity events within 1 second of last reset
 const THROTTLE_MS = 1000
 // Defer lock retry when submission in progress
 const DEFER_MS = 30 * 1000
+
+// Configurable settings (module-level, set via configure())
+let lockEnabled = true
+let lockTimeoutMs = 5 * 60 * 1000
 
 // ---------------------------------------------------------------------------
 // localStorage persistence (survives browser close, unlike sessionStorage)
@@ -21,7 +23,7 @@ function restoreLockState() {
 		const saved = localStorage.getItem(STORAGE_KEY)
 		if (saved) {
 			const data = JSON.parse(saved)
-			if (data?.locked) {
+			if (data?.locked && lockEnabled) {
 				return { locked: true, user: data.user || null }
 			}
 		}
@@ -111,6 +113,8 @@ function getUserInfo() {
 }
 
 function resetTimer() {
+	if (!lockEnabled) return
+
 	const now = Date.now()
 	if (now - lastActivityTime < THROTTLE_MS) return
 	lastActivityTime = now
@@ -118,7 +122,7 @@ function resetTimer() {
 	if (inactivityTimer) {
 		clearTimeout(inactivityTimer)
 	}
-	inactivityTimer = setTimeout(tryLock, LOCK_TIMEOUT_MS)
+	inactivityTimer = setTimeout(tryLock, lockTimeoutMs)
 }
 
 function tryLock() {
@@ -146,6 +150,7 @@ function lock() {
 }
 
 function handleVisibilityChange() {
+	if (!lockEnabled) return
 	if (document.hidden) {
 		// Lock immediately when tab loses focus
 		lock()
@@ -244,6 +249,7 @@ function clearLock() {
 }
 
 function handlePageHide() {
+	if (!lockEnabled) return
 	// Persist lock state on browser close / navigate away so the session
 	// starts locked on reload even if it wasn't locked at the moment of closing
 	if (!isLocked.value) {
@@ -252,6 +258,7 @@ function handlePageHide() {
 }
 
 function startActivityTracking() {
+	if (!lockEnabled) return
 	if (listenersAttached) return
 
 	for (const event of ACTIVITY_EVENTS) {
@@ -282,6 +289,35 @@ function stopActivityTracking() {
 	listenersAttached = false
 }
 
+/**
+ * Configure the session lock behavior.
+ * @param {Object} options
+ * @param {boolean} options.enabled - Whether session lock is enabled
+ * @param {number} options.timeoutMinutes - Inactivity timeout in minutes
+ */
+function configure({ enabled, timeoutMinutes }) {
+	lockEnabled = Boolean(enabled)
+	lockTimeoutMs = (Number.parseInt(timeoutMinutes) || 5) * 60 * 1000
+
+	if (!lockEnabled) {
+		// Disable: stop tracking, clear any active lock
+		stopActivityTracking()
+		if (isLocked.value) {
+			isLocked.value = false
+			lockedUser.value = null
+			verifyError.value = ""
+		}
+		clearPersistedLock()
+	} else if (listenersAttached) {
+		// Already tracking — restart timer with new timeout
+		if (inactivityTimer) {
+			clearTimeout(inactivityTimer)
+		}
+		lastActivityTime = Date.now()
+		inactivityTimer = setTimeout(tryLock, lockTimeoutMs)
+	}
+}
+
 export function useSessionLock() {
 	return {
 		isLocked: readonly(isLocked),
@@ -291,6 +327,7 @@ export function useSessionLock() {
 		lock,
 		unlock,
 		clearLock,
+		configure,
 		startActivityTracking,
 		stopActivityTracking,
 		cachePasswordHashFromLogin,

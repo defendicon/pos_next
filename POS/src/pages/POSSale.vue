@@ -1039,7 +1039,7 @@ const settingsStore = posSettingsStore;
 const { onStockUpdate } = useRealtimeStock();
 
 // Session lock (inactivity + tab-refocus)
-const { lock: lockSession, startActivityTracking, stopActivityTracking } = useSessionLock();
+const { lock: lockSession, configure: configureSessionLock, startActivityTracking, stopActivityTracking } = useSessionLock();
 
 // POS Events system
 const {
@@ -1302,6 +1302,12 @@ onMounted(async () => {
 
 		// Reload settings to ensure all computed properties are fresh
 		await posSettingsStore.reloadSettings();
+
+		// Reconfigure session lock in case security settings changed
+		configureSessionLock({
+			enabled: posSettingsStore.enableSessionLock,
+			timeoutMinutes: posSettingsStore.sessionLockTimeout,
+		});
 	});
 
 	// QZ Tray lifecycle — lazy connect when silent print is enabled
@@ -1409,6 +1415,12 @@ onMounted(async () => {
 
 		log.info("POS Settings loaded:", {
 			allowPartialPayment: posSettingsStore.allowPartialPayment,
+		});
+
+		// Configure session lock from settings
+		configureSessionLock({
+			enabled: posSettingsStore.enableSessionLock,
+			timeoutMinutes: posSettingsStore.sessionLockTimeout,
 		});
 
 		// Load tax rules (depends on settings being loaded)
@@ -1708,6 +1720,11 @@ async function handleShiftOpened() {
 		cartStore.posOpeningShift = shiftStore.currentShift?.name;
 		// Load POS Settings first to get tax_inclusive setting
 		await posSettingsStore.loadSettings(shiftStore.profileName);
+		// Configure session lock from settings
+		configureSessionLock({
+			enabled: posSettingsStore.enableSessionLock,
+			timeoutMinutes: posSettingsStore.sessionLockTimeout,
+		});
 		// Load tax rules with tax_inclusive setting
 		await cartStore.loadTaxRules(shiftStore.profileName, posSettingsStore.settings);
 	}

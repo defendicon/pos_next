@@ -1196,6 +1196,18 @@ def submit_invoice(invoice=None, data=None):
             invoice_doc = frappe.get_doc(doctype, invoice_name)
             invoice_doc.update(invoice)
 
+        if doctype == DOCTYPE_SALES_INVOICE:
+            # Preserve POS-calculated discounts during submit validation/save.
+            # Without this, ERPNext may re-evaluate pricing rules and reset rates.
+            invoice_doc.ignore_pricing_rule = 1
+            invoice_doc.flags.ignore_pricing_rule = True
+
+            # Ensure pricing_rules stays in ERPNext's expected comma-separated format.
+            for item in invoice_doc.get("items", []):
+                pricing_rules = item.get("pricing_rules")
+                if pricing_rules:
+                    item.pricing_rules = _pricing_rule_to_string(pricing_rules)
+
         # Ensure update_stock is set for Sales Invoice
         if doctype == "Sales Invoice":
             invoice_doc.update_stock = 1

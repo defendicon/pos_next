@@ -340,9 +340,9 @@ def get_payment_account(mode_of_payment, company):
 def _set_payment_accounts(payments, company):
     """Set the account for each payment entry that is missing one.
 
-    Uses BaseDocument.set() for assignment which directly writes to __dict__,
-    avoiding potential issues with attribute assignment on child-table Document
-    objects (e.g. 'SalesInvoicePayment' object does not support item assignment).
+    Handles both Document objects (from invoice_doc.payments) and plain dicts
+    (from frontend data).  Document objects use BaseDocument.set() which writes
+    directly to __dict__, while plain dicts use normal key assignment.
     """
     if not payments or not company:
         return
@@ -354,12 +354,18 @@ def _set_payment_accounts(payments, company):
         try:
             account_info = get_payment_account(mode_of_payment, company)
             if account_info:
-                payment.set("account", account_info.get("account"))
+                account = account_info.get("account")
+                if hasattr(payment, "set") and callable(payment.set):
+                    payment.set("account", account)
+                else:
+                    payment["account"] = account
         except Exception as e:
             frappe.log_error(
                 f"Failed to get payment account for {mode_of_payment}: {e}",
                 "Payment Account Lookup",
             )
+
+
 # ==========================================
 # Stock Validation Functions
 # ==========================================
@@ -1353,6 +1359,7 @@ def submit_invoice(invoice=None, data=None):
         invoice_doc.submit()
         invoice_submitted = True
         # Handle wallet transaction reversal for returns
+        wallet_reversal_ok = False
         if invoice_doc.get("is_return") and invoice_doc.get("return_against"):
             from pos_next.pos_next.doctype.wallet_transaction.wallet_transaction import reverse_wallet_transactions_for_return
             try:
@@ -1360,6 +1367,7 @@ def submit_invoice(invoice=None, data=None):
                     original_invoice=invoice_doc.return_against,
                     return_invoice=invoice_doc.name
                 )
+                wallet_reversal_ok = True
             except Exception as wallet_reversal_error:
                 frappe.log_error(
                     title="Wallet Reversal Error",
@@ -1375,9 +1383,13 @@ def submit_invoice(invoice=None, data=None):
                     indicator="orange"
                 )
 
-            # Credit return amount to customer wallet when "Add to Customer Credit Balance" is enabled
+        # Credit return amount to customer wallet when "Add to Customer Credit Balance" is enabled.
+        # Only proceed if the wallet reversal above succeeded (or was not needed) to
+        # avoid double-crediting the customer when reversal fails.
+        if invoice_doc.get("is_return"):
             add_to_customer_balance = invoice.get("add_to_customer_balance")
-            if add_to_customer_balance:
+            has_return_against = bool(invoice_doc.get("return_against"))
+            if add_to_customer_balance and (wallet_reversal_ok or not has_return_against):
                 from pos_next.pos_next.doctype.wallet_transaction.wallet_transaction import credit_return_to_wallet
                 try:
                     credit_return_to_wallet(

@@ -257,12 +257,27 @@ def get_customer_wallet(customer, company=None):
 
 
 def create_wallet_on_customer_insert(doc, method=None):
-	"""Hook: after_insert on Customer. Creates a wallet for the default company."""
+	"""Hook: after_insert on Customer. Creates a wallet for the default company
+	only when auto_create_wallet is enabled in POS Settings."""
 	company = frappe.get_cached_value("Global Defaults", "Global Defaults", "default_company")
 	if not company:
 		return
+
+	# Only auto-create wallets when a POS profile with auto_create_wallet exists
+	pos_profile = frappe.db.get_value(
+		"POS Profile",
+		{"company": company, "disabled": 0},
+		"name"
+	)
+	if not pos_profile:
+		return
+
+	pos_settings = get_pos_settings(pos_profile)
+	if not pos_settings or not cint(pos_settings.get("auto_create_wallet")):
+		return
+
 	try:
-		get_or_create_wallet(doc.name, company)
+		get_or_create_wallet(doc.name, company, pos_settings=pos_settings)
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), f"Wallet auto-create failed for {doc.name}")
 

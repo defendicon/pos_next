@@ -6,6 +6,7 @@ from frappe import _
 from frappe.utils import flt, today
 from erpnext.accounts.general_ledger import make_gl_entries
 from erpnext.controllers.accounts_controller import AccountsController
+from pos_next.api.wallet import get_or_create_wallet
 
 class WalletTransaction(AccountsController):
 	def validate(self):
@@ -108,8 +109,9 @@ class WalletTransaction(AccountsController):
 				"remarks": self.remarks or _("Wallet Credit: {0}").format(self.name)
 			}
 			# Receivable/Payable accounts require party information
-			source_account_type = frappe.get_cached_value("Account", source_account, "account_type")
-			if source_account_type in ("Receivable", "Payable") and self.customer:
+			if not hasattr(self, '_source_account_type'):
+				self._source_account_type = frappe.get_cached_value("Account", source_account, "account_type")
+			if self._source_account_type in ("Receivable", "Payable") and self.customer:
 				source_gl["party_type"] = "Customer"
 				source_gl["party"] = self.customer
 			gl_entries.append(self.get_gl_dict(source_gl))
@@ -283,8 +285,7 @@ def credit_loyalty_points_to_wallet(customer, company, loyalty_points, conversio
 		return None
 
 	# Get or create customer wallet
-	from pos_next.pos_next.doctype.wallet.wallet import get_or_create_wallet
-	wallet = get_or_create_wallet(customer, company)
+	wallet = get_or_create_wallet(customer, company, force_create=True)
 
 	# Create wallet credit transaction
 	transaction = create_wallet_credit(
@@ -317,27 +318,31 @@ def credit_return_to_wallet(return_invoice, amount=None):
 	Returns:
 		Wallet Transaction document or None
 	"""
-	return_doc = frappe.get_doc("Sales Invoice", return_invoice)
+	return_data = frappe.db.get_value(
+		"Sales Invoice",
+		return_invoice,
+		["customer", "company", "grand_total", "is_return", "return_against"],
+		as_dict=True,
+	)
 
-	if not return_doc.is_return:
+	if not return_data or not return_data.is_return:
 		frappe.log_error(
 			title="Wallet Credit on Return Error",
 			message=f"Invoice {return_invoice} is not a return invoice"
 		)
 		return None
 
-	customer = return_doc.customer
-	company = return_doc.company
+	customer = return_data.customer
+	company = return_data.company
 
 	# Determine credit amount: explicit amount or absolute grand_total
-	credit_amount = flt(amount) if amount else abs(flt(return_doc.grand_total))
+	credit_amount = flt(amount) if amount else abs(flt(return_data.grand_total))
 
 	if credit_amount <= 0:
 		return None
 
 	# Get or create customer wallet
-	from pos_next.pos_next.doctype.wallet.wallet import get_or_create_wallet
-	wallet = get_or_create_wallet(customer, company)
+	wallet = get_or_create_wallet(customer, company, force_create=True)
 
 	if not wallet:
 		frappe.log_error(
@@ -384,10 +389,12 @@ def credit_return_to_wallet(return_invoice, amount=None):
 			if has_gl:
 				return existing_transaction
 			# No GL entries → broken submission. Cancel and recreate below.
+			# NOTE: We intentionally do NOT call frappe.db.commit() here so
+			# the cancellation stays within the caller's transaction boundary
+			# and can be rolled back if the subsequent re-creation fails.
 			try:
 				existing_transaction.flags.ignore_permissions = True
 				existing_transaction.cancel()
-				frappe.db.commit()
 			except Exception:
 				frappe.log_error(
 					title="Wallet Transaction Recovery Error",
@@ -408,7 +415,7 @@ def credit_return_to_wallet(return_invoice, amount=None):
 		"reference_name": return_invoice,
 		"remarks": _("Return credit to wallet for {0} against {1}: {2}").format(
 			return_invoice,
-			return_doc.return_against or "",
+			return_data.return_against or "",
 			frappe.format_value(credit_amount, {"fieldtype": "Currency"})
 		)
 	})
@@ -446,7 +453,11 @@ def reverse_wallet_transactions_for_return(original_invoice, return_invoice):
 		return
 
 	existing = frappe.db.exists("Wallet Transaction", {
-    "reference_name": return_invoice, "transaction_type": "Debit", "docstatus": ["!=", 2]
+		"reference_doctype": "Sales Invoice",
+		"reference_name": return_invoice,
+		"transaction_type": "Debit",
+		"source_type": "Refund",
+		"docstatus": ["!=", 2],
 	})
 	if existing:
 		return
@@ -485,9 +496,26 @@ def reverse_wallet_transactions_for_return(original_invoice, return_invoice):
 	min_spent = 0
 	below_min_threshold = False
 	if loyalty_program:
-		min_spent = frappe.db.get_value("Loyalty Program Collection",{"parent": loyalty_program},"min_spent")
-		if min_spent:
-			min_spent = flt(min_spent)
+		from erpnext.accounts.doctype.loyalty_program.loyalty_program import (
+			get_loyalty_program_details_with_points,
+		)
+		lp_details = get_loyalty_program_details_with_points(
+			customer=original_doc.customer,
+			loyalty_program=loyalty_program,
+			company=original_doc.company,
+			silent=True,
+			current_transaction_amount=0,
+		)
+		if lp_details and lp_details.get("collection_rules"):
+			tiers = sorted(
+				[d.as_dict() if hasattr(d, "as_dict") else d for d in lp_details.collection_rules],
+				key=lambda r: flt(r.get("min_spent")),
+			)
+			# Find the highest tier the original invoice amount qualified for
+			for tier in reversed(tiers):
+				if flt(original_total) >= flt(tier.get("min_spent")):
+					min_spent = flt(tier.get("min_spent"))
+					break
 	invoiced_amount_after_return = flt(original_total) - flt(returned_amount)
 	if min_spent and flt(invoiced_amount_after_return) < flt(min_spent):
 		below_min_threshold = True

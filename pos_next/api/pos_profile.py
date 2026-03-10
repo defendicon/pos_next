@@ -553,7 +553,7 @@ def create_pos_profile(*arg ,**parameters):
 		for brand in brands:
 			brand_name = brand if isinstance(brand, str) else brand.get("brand") or brand.get("name")
 			if brand_name:
-				pos_profile.append("brands", {"brand": brand_name})
+				pos_profile.append("custom_brands_table", {"brand": brand_name})
 
 	pos_profile.insert()
 	return pos_profile
@@ -631,11 +631,11 @@ def update_pos_profile(*args, **parameters):
 				pos_profile.append("customer_groups", {"customer_group": customer_group_name})
 
 	if brands is not None:
-		pos_profile.brands = []
+		pos_profile.custom_brands_table = []
 		for brand in brands:
 			brand_name = brand if isinstance(brand, str) else brand.get("brand") or brand.get("name")
 			if brand_name:
-				pos_profile.append("brands", {"brand": brand_name})
+				pos_profile.append("custom_brands_table", {"brand": brand_name})
 		
 	pos_profile.save()
 	return pos_profile

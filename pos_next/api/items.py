@@ -745,7 +745,7 @@ def _build_item_base_conditions(
 	allowed_brands = _get_allowed_profile_brands(pos_profile_doc.name)
 	if allowed_brands:
 		placeholders = ", ".join(["%s"] * len(allowed_brands))
-		conditions.append(f"IFNULL(i.brand, '') IN ({placeholders})")
+		conditions.append(f"i.brand IN ({placeholders})")
 		where_params.extend(allowed_brands)
 
 	if brand:

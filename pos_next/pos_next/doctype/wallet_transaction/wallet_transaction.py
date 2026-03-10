@@ -508,7 +508,7 @@ def reverse_wallet_transactions_for_return(original_invoice, return_invoice):
 		)
 		if lp_details and lp_details.get("collection_rules"):
 			tiers = sorted(
-				[d.as_dict() if hasattr(d, "as_dict") else d for d in lp_details.collection_rules],
+				[d.as_dict() if callable(getattr(d, "as_dict", None)) else d for d in lp_details.collection_rules],
 				key=lambda r: flt(r.get("min_spent")),
 			)
 			# Find the highest tier the original invoice amount qualified for

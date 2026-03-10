@@ -489,45 +489,71 @@ def reverse_wallet_transactions_for_return(original_invoice, return_invoice):
 	return_ratio = returned_amount / original_total
 	is_full_return = return_ratio >= 0.999  # Allow small rounding tolerance
 
-	# Get loyalty program factors using the same function that calculates the original credit
-	# Original: points = eligible_amount / collection_factor, wallet = points * conversion_factor
+	# Get loyalty program details for tier-aware reversal of Loyalty Credit.
+	# Supports both "Single Tier Program" (one rule) and "Multiple Tier Program" (many rules).
+	# Original credit: points = int(eligible_amount / collection_factor), wallet = points * conversion_factor
 	loyalty_program = frappe.db.get_value("Customer", original_doc.customer, "loyalty_program")
 
-	min_spent = 0
-	below_min_threshold = False
+	tiers = []
+	conversion_factor = 1.0
 	if loyalty_program:
-		from erpnext.accounts.doctype.loyalty_program.loyalty_program import (
-			get_loyalty_program_details_with_points,
+		lp_doc = frappe.get_doc("Loyalty Program", loyalty_program)
+		conversion_factor = flt(lp_doc.conversion_factor) or 1.0
+		tiers = sorted(
+			[d.as_dict() for d in lp_doc.collection_rules],
+			key=lambda r: flt(r.get("min_spent")),
 		)
-		lp_details = get_loyalty_program_details_with_points(
-			customer=original_doc.customer,
-			loyalty_program=loyalty_program,
-			company=original_doc.company,
-			silent=True,
-			current_transaction_amount=0,
-		)
-		if lp_details and lp_details.get("collection_rules"):
-			tiers = sorted(
-				[d.as_dict() if callable(getattr(d, "as_dict", None)) else d for d in lp_details.collection_rules],
-				key=lambda r: flt(r.get("min_spent")),
-			)
-			# Find the highest tier the original invoice amount qualified for
-			for tier in reversed(tiers):
-				if flt(original_total) >= flt(tier.get("min_spent")):
-					min_spent = flt(tier.get("min_spent"))
-					break
+
 	invoiced_amount_after_return = flt(original_total) - flt(returned_amount)
-	if min_spent and flt(invoiced_amount_after_return) < flt(min_spent):
-		below_min_threshold = True
+
+	def _find_tier(amount):
+		"""Return the highest tier whose min_spent <= amount, or None."""
+		matched = None
+		for t in tiers:
+			if flt(amount) >= flt(t.get("min_spent")):
+				matched = t
+		return matched
+
+	# Determine the applicable tier for the post-return effective amount
+	new_tier = _find_tier(invoiced_amount_after_return) if tiers else None
+
 	for wt in wallet_transactions:
-		if is_full_return or below_min_threshold:
-			# Full return - cancel the wallet transaction
+		# ── Decide: cancel entirely  OR  create a partial Debit ──
+		should_cancel = False
+		reverse_amount = 0
+
+		if is_full_return:
+			should_cancel = True
+
+		elif wt.transaction_type == "Loyalty Credit" and tiers:
+			# Tier-aware reversal for Loyalty Credit
+			if not new_tier:
+				# Post-return amount below the lowest tier's min_spent → reverse ALL
+				should_cancel = True
+			else:
+				# Recalculate what the credit should be for the post-return amount
+				new_cf = flt(new_tier.get("collection_factor")) or 1.0
+				recalculated_points = int(flt(invoiced_amount_after_return) / new_cf)
+				recalculated_credit = flt(recalculated_points) * flt(conversion_factor)
+				reverse_amount = flt(flt(wt.amount) - recalculated_credit, 2)
+
+				if flt(reverse_amount) >= flt(wt.amount):
+					# Recalculated credit is zero or negative → cancel entirely
+					should_cancel = True
+					reverse_amount = 0
+
+		else:
+			# Regular Credit (or Loyalty Credit without tiers) → proportional reversal
+			reverse_amount = flt(wt.amount * return_ratio, 2)
+
+		# ── Execute the reversal ──
+		if should_cancel:
 			try:
 				wt_doc = frappe.get_doc("Wallet Transaction", wt.name)
 				wt_doc.flags.ignore_permissions = True
 				wt_doc.cancel()
 				frappe.msgprint(
-					_("Cancelled Wallet Transaction {0} due to full return").format(wt.name),
+					_("Cancelled Wallet Transaction {0} due to return").format(wt.name),
 					alert=True, indicator="blue"
 				)
 			except Exception as e:
@@ -535,12 +561,8 @@ def reverse_wallet_transactions_for_return(original_invoice, return_invoice):
 					title="Wallet Transaction Cancel on Return Error",
 					message=f"WT: {wt.name}, Return: {return_invoice}, Error: {str(e)}\n{frappe.get_traceback()}"
 				)
-		else:
-			reverse_amount = flt(wt.amount * return_ratio, 2)
-			
-			if reverse_amount <= 0:
-				continue
 
+		elif reverse_amount > 0:
 			try:
 				reverse_wt = frappe.get_doc({
 					"doctype": "Wallet Transaction",

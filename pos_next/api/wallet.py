@@ -59,6 +59,23 @@ def process_loyalty_to_wallet(doc, method=None):
 	if not loyalty_program:
 		return
 
+	# Check if the invoice amount meets the applicable tier's min_spent threshold.
+	# Single Tier Program: the one rule's min_spent must be met.
+	# Multiple Tier Program: the invoice must reach at least the lowest tier's min_spent.
+	lp_doc = frappe.get_doc("Loyalty Program", loyalty_program)
+	tiers = sorted(
+		[d.as_dict() for d in lp_doc.collection_rules],
+		key=lambda r: flt(r.get("min_spent")),
+	)
+	invoice_amount = abs(flt(doc.grand_total))
+	matched_tier = None
+	for t in tiers:
+		if flt(invoice_amount) >= flt(t.get("min_spent")):
+			matched_tier = t
+	if not matched_tier:
+		# Invoice amount below the minimum spend threshold of all tiers — no loyalty credit
+		return
+
 	# Get the loyalty points earned from this invoice
 	loyalty_entry = frappe.db.get_value(
 		"Loyalty Point Entry",

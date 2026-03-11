@@ -1808,7 +1808,6 @@ def get_brands(pos_profile):
 
 	try:
 		POSBrandsDetail = DocType("POS Brands Detail")
-		Brand = DocType("Brand")
 
 		configured_brands = (
 			frappe.qb.from_(POSBrandsDetail)
@@ -1819,18 +1818,18 @@ def get_brands(pos_profile):
 			.run(pluck="brand")
 		)
 
+		# When no brands are configured in the POS Profile, we intentionally
+		# return an empty list instead of falling back to the first N brands
+		# in the system. This keeps the behaviour consistent with the
+		# "allowed brands" logic in `_build_item_base_conditions`, which
+		# interprets an empty configured set as "no brand restriction" on
+		# items, and avoids confusing brand tabs that don't match the
+		# underlying item filter.
 		if not configured_brands:
-			result = (
-				frappe.qb.from_(Brand)
-				.select(Brand.name.as_("brand"))
-				.orderby(Brand.name)
-				.limit(50)
-				.run(as_dict=True)
-			)
-			frappe.cache().set_value(cache_key, result, expires_in_sec=300)
-			return result
+			result = []
+		else:
+			result = [{"brand": brand_name} for brand_name in configured_brands]
 
-		result = [{"brand": brand_name} for brand_name in configured_brands]
 		frappe.cache().set_value(cache_key, result, expires_in_sec=300)
 		return result
 

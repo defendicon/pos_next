@@ -1094,7 +1094,20 @@ def _get_bundle_warehouse_availability_bulk(bundle_codes, warehouses):
 
 @frappe.whitelist()
 def get_items(pos_profile, search_term=None, item_group=None, start=0, limit=20, include_variants=0, show_variants_as_items=0, brand=None):
-	"""Get items for POS with stock, price, and tax details"""
+	"""Get items for POS with stock, price, and tax details.
+
+	Filter behaviour:
+	- You may filter by either ``item_group`` (with hierarchical descendants) OR ``brand``.
+	- Providing BOTH ``item_group`` and ``brand`` in the same request is not allowed and will raise a validation error.
+	  This matches the POS frontend behaviour where these filters are mutually exclusive.
+	"""
+	# Enforce the same mutual exclusivity as the frontend:
+	# brand filter and item_group filter cannot be used together.
+	if item_group and brand:
+		frappe.throw(
+			_("You can filter by either Item Group or Brand, not both at the same time."),
+		)
+
 	try:
 		pos_profile_doc = frappe.get_cached_doc("POS Profile", pos_profile)
 

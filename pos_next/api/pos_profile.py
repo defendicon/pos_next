@@ -638,6 +638,18 @@ def update_pos_profile(*args, **parameters):
 				pos_profile.append("custom_brands_table", {"brand": brand_name})
 		
 	pos_profile.save()
+
+	# Invalidate cached POS filters so changes are reflected immediately in POS UI
+	try:
+		cache = frappe.cache()
+		# Brands cache (used by pos_next.api.items.get_brands)
+		cache.delete_value(f"pos_brands:{pos_profile.name}")
+		# Item groups cache (used by pos_next.api.items.get_item_groups)
+		cache.delete_value(f"pos_item_groups:{pos_profile.name}")
+	except Exception:
+		# Cache invalidation issues should not block updating the POS Profile
+		frappe.log_error(frappe.get_traceback(), "POS Profile Cache Invalidation Error")
+
 	return pos_profile
 	
 @frappe.whitelist()

@@ -1818,15 +1818,18 @@ def get_brands(pos_profile):
 			.run(pluck="brand")
 		)
 
-		# When no brands are configured in the POS Profile, we intentionally
-		# return an empty list instead of falling back to the first N brands
-		# in the system. This keeps the behaviour consistent with the
-		# "allowed brands" logic in `_build_item_base_conditions`, which
-		# interprets an empty configured set as "no brand restriction" on
-		# items, and avoids confusing brand tabs that don't match the
-		# underlying item filter.
 		if not configured_brands:
-			result = []
+			# No brands configured on the POS Profile → show all active brands
+			# as filter options, while the actual item query remains
+			# unrestricted by brand (since `_get_allowed_profile_brands`
+			# will also see an empty list and skip brand conditions).
+			Brand = DocType("Brand")
+			result = (
+				frappe.qb.from_(Brand)
+				.select(Brand.name.as_("brand"))
+				.orderby(Brand.name)
+				.run(as_dict=True)
+			)
 		else:
 			result = [{"brand": brand_name} for brand_name in configured_brands]
 

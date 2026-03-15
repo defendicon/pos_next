@@ -310,7 +310,7 @@ async function applyCoupon() {
 		appliedDiscount.value = {
 			name: coupon.coupon_name || coupon.coupon_code,
 			code: couponCode.value.toUpperCase(),
-			percentage: coupon.discount_percentage || 0,
+			percentage: coupon.discount_type === "Percentage" ? coupon.discount_percentage : 0,
 			amount: discountAmount,
 			type: coupon.discount_type,
 			coupon: coupon,

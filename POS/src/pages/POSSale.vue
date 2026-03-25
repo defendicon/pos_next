@@ -27,7 +27,7 @@
 				:silent-print-enabled="posSettingsStore.silentPrint"
 				:qz-connected="qzConnected"
 				@sync-click="handleSyncClick"
-				@printer-click="uiStore.showHistoryDialog = true"
+				@printer-click="openHistoryDialog"
 				@refresh-click="handleRefresh"
 				@clear-cache="handleClearCache"
 				@logout="uiStore.showLogoutDialog = true"
@@ -54,7 +54,8 @@
 						<span>{{ __("View Shift") }}</span>
 					</button>
 					<button
-						@click="uiStore.showDraftDialog = true"
+						v-if="canAccessShiftActions"
+						@click="openDraftDialog"
 						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 flex items-center gap-3 transition-colors relative"
 					>
 						<svg
@@ -79,7 +80,8 @@
 						</span>
 					</button>
 					<button
-						@click="uiStore.showHistoryDialog = true"
+						v-if="canAccessShiftActions"
+						@click="openHistoryDialog"
 						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 flex items-center gap-3 transition-colors"
 					>
 						<svg
@@ -126,7 +128,8 @@
 						</span>
 					</button>
 					<button
-						@click="uiStore.showReturnDialog = true"
+						v-if="canAccessShiftActions"
+						@click="openReturnDialog"
 						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 flex items-center gap-3 transition-colors"
 					>
 						<svg
@@ -167,6 +170,7 @@
 				</template>
 				<template #additional-actions>
 					<button
+						v-if="canAccessShiftActions"
 						@click="handleCloseShift()"
 						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-orange-50 flex items-center gap-3 transition-colors"
 					>
@@ -367,10 +371,10 @@
 								@update-uom="cartStore.changeItemUOM"
 								@edit-item="handleEditItem"
 								@view-shift="uiStore.showOpenShiftDialog = true"
-								@show-drafts="uiStore.showDraftDialog = true"
-								@show-history="uiStore.showHistoryDialog = true"
-								@show-return="uiStore.showReturnDialog = true"
-								@close-shift="handleCloseShift()"
+								@show-drafts="openDraftDialog"
+								@show-history="openHistoryDialog"
+								@show-return="openReturnDialog"
+								@close-shift="handleCloseShift"
 							/>
 						</div>
 					</keep-alive>
@@ -1166,6 +1170,8 @@ const profileWarehouses = computed(() => {
 	return [];
 });
 
+const canAccessShiftActions = computed(() => shiftStore.hasOpenShift);
+
 // Resize state
 let resizeState = null;
 let bodyStyleSnapshot = null;
@@ -1436,7 +1442,12 @@ watch(
 	(value) => {
 		if (value && typeof window !== "undefined") {
 			updateLayoutBounds();
+			return;
 		}
+
+		uiStore.showDraftDialog = false;
+		uiStore.showHistoryDialog = false;
+		uiStore.showReturnDialog = false;
 	}
 );
 
@@ -2181,7 +2192,35 @@ async function handleOptionSelected(option) {
 }
 
 function handleCloseShift() {
+	if (!canAccessShiftActions.value) {
+		return;
+	}
+
 	uiStore.showCloseShiftDialog = true;
+}
+
+function openDraftDialog() {
+	if (!canAccessShiftActions.value) {
+		return;
+	}
+
+	uiStore.showDraftDialog = true;
+}
+
+function openHistoryDialog() {
+	if (!canAccessShiftActions.value) {
+		return;
+	}
+
+	uiStore.showHistoryDialog = true;
+}
+
+function openReturnDialog() {
+	if (!canAccessShiftActions.value) {
+		return;
+	}
+
+	uiStore.showReturnDialog = true;
 }
 
 function formatCurrency(amount) {

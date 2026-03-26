@@ -147,6 +147,26 @@
 						</svg>
 						<span>{{ __("Return Invoice") }}</span>
 					</button>
+					<button
+						v-if="canAccessShiftActions"
+						@click="switchToDesk"
+						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-emerald-50 flex items-center gap-3 transition-colors"
+					>
+						<svg
+							class="w-5 h-5 text-emerald-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M3 7h18M3 12h18M3 17h18"
+							/>
+						</svg>
+						<span>{{ __("Switch To Desk") }}</span>
+					</button>
 					<hr class="my-1 border-gray-100">
 					<button
 						@click="lockSession()"
@@ -2221,6 +2241,14 @@ function openReturnDialog() {
 	}
 
 	uiStore.showReturnDialog = true;
+}
+
+function switchToDesk() {
+	if (!canAccessShiftActions.value || typeof window === "undefined") {
+		return;
+	}
+
+	window.location.assign("/app");
 }
 
 function formatCurrency(amount) {

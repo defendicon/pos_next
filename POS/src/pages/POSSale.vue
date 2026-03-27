@@ -1956,6 +1956,7 @@ async function handlePaymentCompleted(paymentData) {
 		if (paymentData.payments && Array.isArray(paymentData.payments)) {
 			paymentData.payments.forEach((p) => {
 				cartStore.payments.push({
+					...p,
 					mode_of_payment: p.mode_of_payment,
 					amount: p.amount,
 					type: p.type,

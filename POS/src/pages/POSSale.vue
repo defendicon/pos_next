@@ -27,7 +27,7 @@
 				:silent-print-enabled="posSettingsStore.silentPrint"
 				:qz-connected="qzConnected"
 				@sync-click="handleSyncClick"
-				@printer-click="uiStore.showHistoryDialog = true"
+				@printer-click="openHistoryDialog"
 				@refresh-click="handleRefresh"
 				@clear-cache="handleClearCache"
 				@logout="uiStore.showLogoutDialog = true"
@@ -54,7 +54,8 @@
 						<span>{{ __("View Shift") }}</span>
 					</button>
 					<button
-						@click="uiStore.showDraftDialog = true"
+						v-if="canAccessShiftActions"
+						@click="openDraftDialog"
 						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 flex items-center gap-3 transition-colors relative"
 					>
 						<svg
@@ -79,7 +80,8 @@
 						</span>
 					</button>
 					<button
-						@click="uiStore.showHistoryDialog = true"
+						v-if="canAccessShiftActions"
+						@click="openHistoryDialog"
 						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 flex items-center gap-3 transition-colors"
 					>
 						<svg
@@ -126,7 +128,8 @@
 						</span>
 					</button>
 					<button
-						@click="uiStore.showReturnDialog = true"
+						v-if="canAccessShiftActions"
+						@click="openReturnDialog"
 						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 flex items-center gap-3 transition-colors"
 					>
 						<svg
@@ -144,7 +147,27 @@
 						</svg>
 						<span>{{ __("Return Invoice") }}</span>
 					</button>
-					<hr class="my-1 border-gray-100">
+					<button
+						v-if="canAccessShiftActions"
+						@click="switchToDesk"
+						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-emerald-50 flex items-center gap-3 transition-colors"
+					>
+						<svg
+							class="w-5 h-5 text-emerald-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M3 7h18M3 12h18M3 17h18"
+							/>
+						</svg>
+						<span>{{ __("Switch To Desk") }}</span>
+					</button>
+					<hr class="my-1 border-gray-100"> 
 					<button
 						@click="lockSession()"
 						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 flex items-center gap-3 transition-colors"
@@ -167,6 +190,7 @@
 				</template>
 				<template #additional-actions>
 					<button
+						v-if="canAccessShiftActions"
 						@click="handleCloseShift()"
 						class="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-orange-50 flex items-center gap-3 transition-colors"
 					>
@@ -367,10 +391,10 @@
 								@update-uom="cartStore.changeItemUOM"
 								@edit-item="handleEditItem"
 								@view-shift="uiStore.showOpenShiftDialog = true"
-								@show-drafts="uiStore.showDraftDialog = true"
-								@show-history="uiStore.showHistoryDialog = true"
-								@show-return="uiStore.showReturnDialog = true"
-								@close-shift="handleCloseShift()"
+								@show-drafts="openDraftDialog"
+								@show-history="openHistoryDialog"
+								@show-return="openReturnDialog"
+								@close-shift="handleCloseShift"
 							/>
 						</div>
 					</keep-alive>
@@ -1166,6 +1190,8 @@ const profileWarehouses = computed(() => {
 	return [];
 });
 
+const canAccessShiftActions = computed(() => shiftStore.hasOpenShift);
+
 // Resize state
 let resizeState = null;
 let bodyStyleSnapshot = null;
@@ -1436,7 +1462,12 @@ watch(
 	(value) => {
 		if (value && typeof window !== "undefined") {
 			updateLayoutBounds();
+			return;
 		}
+
+		uiStore.showDraftDialog = false;
+		uiStore.showHistoryDialog = false;
+		uiStore.showReturnDialog = false;
 	}
 );
 
@@ -2181,7 +2212,43 @@ async function handleOptionSelected(option) {
 }
 
 function handleCloseShift() {
+	if (!canAccessShiftActions.value) {
+		return;
+	}
+
 	uiStore.showCloseShiftDialog = true;
+}
+
+function openDraftDialog() {
+	if (!canAccessShiftActions.value) {
+		return;
+	}
+
+	uiStore.showDraftDialog = true;
+}
+
+function openHistoryDialog() {
+	if (!canAccessShiftActions.value) {
+		return;
+	}
+
+	uiStore.showHistoryDialog = true;
+}
+
+function openReturnDialog() {
+	if (!canAccessShiftActions.value) {
+		return;
+	}
+
+	uiStore.showReturnDialog = true;
+}
+
+function switchToDesk() {
+	if (!canAccessShiftActions.value || typeof window === "undefined") {
+		return;
+	}
+
+	window.location.assign("/app");
 }
 
 function formatCurrency(amount) {

@@ -64,7 +64,7 @@ function receiptDocFromQueuedInvoice(offlineId, raw) {
 		discount_amount: Number.parseFloat(raw.total_discount) || 0,
 		payments,
 		paid_amount: paidAmount,
-		change_amount: 0,
+		change_amount: Number.parseFloat(raw.change_amount) || 0,
 		outstanding_amount: Math.max(0, grandTotal - paidAmount),
 		status: grandTotal - paidAmount < 0.01 ? "Paid" : "Unpaid",
 		docstatus: 0,

@@ -2038,6 +2038,7 @@ async function handlePaymentCompleted(paymentData) {
 			const invoiceData = {
 				pos_profile: cartStore.posProfile,
 				posa_pos_opening_shift: cartStore.posOpeningShift,
+				company: shiftStore.profileCompany,
 				customer: customerValue || shiftStore.profileCustomer,
 				items: preparedItems,
 				payments: JSON.parse(JSON.stringify(cartStore.payments)),
@@ -2046,6 +2047,7 @@ async function handlePaymentCompleted(paymentData) {
 				total_tax: cartStore.totalTax,
 				total_discount: cartStore.totalDiscount,
 				write_off_amount: paymentData.write_off_amount || 0,
+				change_amount: paymentData.change_amount || 0,
 			};
 
 			// Save to the offline queue first so we can use the worker's

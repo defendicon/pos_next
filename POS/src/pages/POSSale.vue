@@ -2048,7 +2048,13 @@ async function handlePaymentCompleted(paymentData) {
 				write_off_amount: paymentData.write_off_amount || 0,
 			};
 
-			const offlineReceiptName = `OFFLINE-${Date.now()}`;
+			// Save to the offline queue first so we can use the worker's
+			// canonical pos_offline_<uuid> id as the cache key — keeping
+			// IndexedDB and sessionStorage aligned on a single identifier.
+			const saveResult = await offlineStore.saveInvoiceOffline(invoiceData);
+			const offlineReceiptName =
+				saveResult?.offline_id || invoiceData.offline_id || `pos_offline_${Date.now()}`;
+
 			const paidAmount = paymentData.paid_amount ?? cartStore.grandTotal ?? 0;
 			const grandTotal = cartStore.grandTotal || 0;
 			const customerLabel =
@@ -2080,8 +2086,6 @@ async function handlePaymentCompleted(paymentData) {
 			};
 			uiStore.setLastOfflinePrintDoc(offlinePrintDoc);
 			cacheOfflineReceiptPayload(offlineReceiptName, offlinePrintDoc);
-
-			await offlineStore.saveInvoiceOffline(invoiceData);
 			uiStore.showPaymentDialog = false;
 			cartStore.clearCart();
 			// Reset cart hash after successful payment
@@ -2835,7 +2839,7 @@ function handleViewInvoice(invoice) {
 // Centralized print handler - uses printInvoice.js utilities
 async function handlePrintInvoice(invoiceData) {
 	try {
-		invoiceData = hydrateLocalOnlyInvoice(invoiceData || {});
+		invoiceData = await hydrateLocalOnlyInvoice(invoiceData || {});
 		const offlineSnapshot = uiStore.lastOfflinePrintDoc;
 		if (
 			invoiceData?.name &&

@@ -279,9 +279,8 @@
 import { useFormatters } from "@/composables/useFormatters"
 import { DEFAULT_CURRENCY, formatCurrency as formatCurrencyUtil } from "@/utils/currency"
 import { getInvoiceStatusColor } from "@/utils/invoice"
-import { getOfflineReceiptPayload } from "@/utils/offline/offlineReceiptCache"
 import { logger } from "@/utils/logger"
-import { isLocalOnlyInvoiceName } from "@/utils/printInvoice"
+import { hydrateLocalOnlyInvoice, isLocalOnlyInvoiceName } from "@/utils/printInvoice"
 import { Button, Dialog, call } from "frappe-ui"
 import { ref, watch, nextTick, computed } from "vue"
 
@@ -371,15 +370,15 @@ async function loadInvoiceDetails() {
 	loading.value = true
 	try {
 		if (isLocalOnlyInvoiceName(props.invoiceName)) {
-			const cached = getOfflineReceiptPayload(props.invoiceName)
-			if (cached) {
+			// Hydrate from sessionStorage first, fall back to IndexedDB so a
+			// post-reload detail view still resolves offline receipts.
+			const cached = await hydrateLocalOnlyInvoice({ name: props.invoiceName })
+			if (cached?.items?.length > 0) {
 				const result = JSON.parse(JSON.stringify(cached))
-				if (result.items) {
-					result.items = result.items.map((item) => ({
-						...item,
-						quantity: item.quantity ?? item.qty,
-					}))
-				}
+				result.items = result.items.map((item) => ({
+					...item,
+					quantity: item.quantity ?? item.qty,
+				}))
 				invoiceData.value = result
 				return
 			}

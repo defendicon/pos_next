@@ -1,6 +1,7 @@
 import { call } from "@/utils/apiWrapper"
-import { getOfflineReceiptPayload } from "@/utils/offline/offlineReceiptCache"
 import { logger } from "@/utils/logger"
+import { getOfflineReceiptPayload } from "@/utils/offline/offlineReceiptCache"
+import { getOfflineInvoiceByOfflineId } from "@/utils/offline/sync"
 import { printHTML as qzPrintHTML } from "@/utils/qzTray"
 
 const log = logger.create("PrintInvoice")
@@ -34,14 +35,65 @@ export function isLocalOnlyInvoiceName(name) {
 }
 
 /**
- * Merge session-cached offline receipt when callers only have { name }.
- * Prevents server print / get_invoice for synthetic OFFLINE-* ids.
+ * Build a minimal printable receipt doc from a raw queued invoice payload
+ * (the dict stored in IndexedDB invoice_queue.data). Used when sessionStorage
+ * has been wiped but the invoice is still in the local queue.
  */
-export function hydrateLocalOnlyInvoice(invoiceData) {
+function receiptDocFromQueuedInvoice(offlineId, raw) {
+	const items = Array.isArray(raw.items) ? raw.items : []
+	const payments = Array.isArray(raw.payments) ? raw.payments : []
+	const grandTotal = Number.parseFloat(raw.grand_total) || 0
+	const paidAmount = payments.reduce(
+		(sum, p) => sum + (Number.parseFloat(p.amount) || 0),
+		0,
+	)
+	return {
+		name: offlineId,
+		doctype: "Sales Invoice",
+		is_offline: true,
+		pos_profile: raw.pos_profile,
+		posting_date: raw.posting_date || new Date().toISOString().slice(0, 10),
+		company: raw.company,
+		customer_name: raw.customer,
+		items: items.map((item) => ({
+			...item,
+			quantity: item.quantity ?? item.qty,
+		})),
+		grand_total: grandTotal,
+		total_taxes_and_charges: Number.parseFloat(raw.total_tax) || 0,
+		discount_amount: Number.parseFloat(raw.total_discount) || 0,
+		payments,
+		paid_amount: paidAmount,
+		change_amount: 0,
+		outstanding_amount: Math.max(0, grandTotal - paidAmount),
+		status: grandTotal - paidAmount < 0.01 ? "Paid" : "Unpaid",
+		docstatus: 0,
+	}
+}
+
+/**
+ * Hydrate a local-only invoice from cache. Checks sessionStorage first
+ * (fast path, survives within the tab), then falls back to IndexedDB
+ * (survives page reloads while the invoice is still in the offline queue).
+ * Prevents server print / get_invoice for synthetic pos_offline_* ids.
+ */
+export async function hydrateLocalOnlyInvoice(invoiceData) {
 	if (!invoiceData?.name || !isLocalOnlyInvoiceName(invoiceData.name)) return invoiceData
 	if (invoiceData.items?.length > 0) return invoiceData
+
 	const cached = getOfflineReceiptPayload(invoiceData.name)
 	if (cached?.items?.length > 0) return cached
+
+	// sessionStorage wiped (page reload) — rebuild from IndexedDB queue.
+	try {
+		const queued = await getOfflineInvoiceByOfflineId(invoiceData.name)
+		if (queued?.items?.length > 0) {
+			return receiptDocFromQueuedInvoice(invoiceData.name, queued)
+		}
+	} catch (err) {
+		log.warn("IndexedDB hydrate fallback failed:", err?.message || err)
+	}
+
 	return invoiceData
 }
 
@@ -224,7 +276,7 @@ export async function printInvoice(invoiceData, printFormat = null, letterhead =
 	try {
 		if (!invoiceData?.name) throw new Error("Invalid invoice data")
 
-		invoiceData = hydrateLocalOnlyInvoice(invoiceData)
+		invoiceData = await hydrateLocalOnlyInvoice(invoiceData)
 
 		// Pending offline / local IDs are not in ERPNext — use embedded receipt HTML.
 		if (isLocalOnlyInvoiceName(invoiceData.name)) {
@@ -270,8 +322,8 @@ export async function printInvoice(invoiceData, printFormat = null, letterhead =
  * then open the browser print window.
  */
 export async function printInvoiceByName(invoiceName, printFormat = null, letterhead = null) {
-	const localDoc = hydrateLocalOnlyInvoice({ name: invoiceName })
 	if (isLocalOnlyInvoiceName(invoiceName)) {
+		const localDoc = await hydrateLocalOnlyInvoice({ name: invoiceName })
 		if (!localDoc.items?.length) {
 			throw new Error(
 				__(
@@ -305,7 +357,7 @@ export async function printInvoiceByName(invoiceName, printFormat = null, letter
  */
 export async function silentPrintInvoice(invoiceName, printFormat = null) {
 	if (isLocalOnlyInvoiceName(invoiceName)) {
-		const doc = hydrateLocalOnlyInvoice({ name: invoiceName })
+		const doc = await hydrateLocalOnlyInvoice({ name: invoiceName })
 		if (doc.items?.length > 0) return silentPrintInvoiceFromDoc(doc)
 		throw new Error(
 			__(
@@ -353,7 +405,7 @@ export async function silentPrintInvoiceFromDoc(invoiceData) {
  * internally, so no separate connection logic is needed here.
  */
 export async function printWithSilentFallback(invoiceData, printFormat = null) {
-	invoiceData = hydrateLocalOnlyInvoice(invoiceData)
+	invoiceData = await hydrateLocalOnlyInvoice(invoiceData)
 	const invoiceName = invoiceData?.name
 	if (!invoiceName) throw new Error("Invalid invoice data — missing name")
 

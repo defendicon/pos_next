@@ -471,7 +471,7 @@ export function printInvoiceCustom(invoiceData) {
 	const printWindow = window.open("", "_blank", "width=350,height=600")
 	if (!printWindow) {
 		log.error("Cannot open print window — popup blocked.")
-		throw new Error("Popup blocked — check your browser settings.")
+		throw new Error(__("Popup blocked — check your browser settings."))
 	}
 
 	const printContent = buildReceiptDocumentHTML(invoiceData, { includeControls: true })
